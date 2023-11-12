@@ -95,12 +95,21 @@ class TransformerModel(nn.Module):
         # add the position embedding to the patches
         position_embedded_patches = self.position_embedded_patches(patches)
         # now go throug the transformer layers
+        encoded_patches = torch.tensor([])
         for layerIndex, moduleName in enumerate(self.transform_layers):
             # get the module
             print(moduleName, layerIndex)
             module = self.transform_layers[moduleName]
             # pass the input through the module
-        return None
+       # after going through all of the transformer layers, final normalization layer
+        norm = self.last_norm(encoded_patches)
+        # apply gap
+        gap = nn.AvgPool1d(norm.size()[1])
+        # pass throug the final multilayer perceptron
+        mlp_head = self.mlp_head(gap)
+        # pass through the logits
+        logits = self.logits(mlp_head)
+        return logits
 
 class SensorPatches(nn.Linear):
     def __init__(self,projection_dim,patchSize,timeStep):
