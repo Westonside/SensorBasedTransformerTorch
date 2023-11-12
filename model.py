@@ -19,10 +19,12 @@ class TransformerModel(nn.Module):
             projection_dim, ]
         #make an input layer that takes in the input and projects it to the correct size
         self.flatten = nn.Flatten() # flatten
-        self.layer_1 = nn.linear(input_shape[0] * input_shape[1],projection_dim)
-        self.input_layer = nn.Linear()
-        self.num_patches = self.patches.shape[1]
+        #TODO ADD BATCH SIZE
+        batch_size = 32
+        self.layer_1 = nn.Linear(batch_size, input_shape[0], input_shape[1])
+        self.input_layer = nn.Linear(in_features=projection_dim, out_features=projection_dim)
         self.transform_layers = nn.ModuleDict() # add items as you go
+        self.activation = nn.SiLU()
         self.dropOut = nn.Dropout(dropout_rate)
         self.mlp_head_units = mlp_head_units
 
@@ -59,14 +61,14 @@ class TransformerModel(nn.Module):
 
             # the next normalization layer
             x2_name = f"layer_{layerIndex}_2_norm"
-            x2 = nn.LayerNorm(eps=1e-6, normalized_shape=self.position_embedded_patches.size()[1:])
+            x2 = nn.LayerNorm(eps=1e-6, normalized_shape=projection_dim)
             self.transform_layers[x2_name] = x2
 
             # the multilayer perceptron
             x3_name = f"layer_{layerIndex}_mlp"
             x3 = nn.Sequential(
-                nn.Linear(self.position_embedded_patches.size()[1], self.transformer_units[0]),
-                nn.Linear(self.transformer_units[0], self.transformer_units[1]),
+                nn.Linear(in_features=patchSize/2, out_features=self.transformer_units[0]),
+                nn.Linear(in_features=pat),
             )
             self.transform_layers[x3_name] = x3
 
@@ -99,7 +101,6 @@ class TransformerModel(nn.Module):
 
     def forward(self, src: Tensor) -> Tensor:
         # generate the patches
-        patches = self.patches(src)
         # add the position embedding to the patches
         position_embedded_patches = self.position_embedded_patches(patches)
         # now go throug the transformer layers
@@ -131,6 +132,8 @@ class TransformerModel(nn.Module):
             else:
                 # apply the layer
                 encoded_patches = module(encoded_patches)
+                if  module_name.endswith("mlp"):
+                    # apply the activation
 
 
 
@@ -144,6 +147,7 @@ class TransformerModel(nn.Module):
         # pass through the logits
         logits = self.logits(mlp_head)
         return logits
+
 
 class SensorPatches(nn.Linear):
     def __init__(self,projection_dim,patchSize,timeStep):
@@ -214,15 +218,15 @@ class DropPath(nn.Module):
         else:
             return x
 class SensorMultiHeadAttention(nn.Module):
-    def __init__(self, projectionQuarter, num_heads, startIndex, stopIndex, dropout_rate=0.0, drop_path_rate=0.0):
-        super(SensorMultiHeadAttention).__init__()
-        self.projectionQuarter = projectionQuarter
+    def __init__(self, projection_half, num_heads, startIndex, stopIndex, dropout_rate=0.0, drop_path_rate=0.0):
+        super(SensorMultiHeadAttention, self).__init__()
+        self.projection_half = projection_half
         self.num_heads = num_heads
         self.start_index = startIndex # the starting index
         self.stop_index = stopIndex # the stop index of the data to process
         self.dropout_rate = dropout_rate
         self.drop_path_rate = drop_path_rate
-        self.attention = nn.MultiheadAttention(embed_dim=projectionQuarter, num_heads=num_heads, dropout=dropout_rate)
+        self.attention = nn.MultiheadAttention(embed_dim=projection_half, num_heads=num_heads, dropout=dropout_rate)
         # pass input into the transformer attention attention  = torch.nn.MultiheadAttention(<input-size>, <num-heads>) -> x, _ = attention(x, x, x)
         self.drop_path = DropPath(drop_path_rate) #TODO figure out what a drop path is
 

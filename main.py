@@ -23,7 +23,7 @@ def main():
     projection_dim = 192
     frame_length = 16
     time_step = 16
-    data_set_name = "MOTIONSENSE"
+    data_set_name = "MotionSense"
 
     segment_size = 128
     num_input_channels = 6
@@ -44,7 +44,8 @@ def main():
     #TODO: allow for actually getting the number of clients I am just hard coding for now
     client_count = 24
     # TODO: make a dataloader for the data set
-    dataset_loader = loadDataset(data_set_name, client_count, None, None, "../HART/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/datasets/")
+    main_dir = "../Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/"
+    dataset_loader = loadDataset(data_set_name, client_count, None, None, main_dir)
     central_train_data = dataset_loader.centralTrainData
     central_train_label = dataset_loader.centralTrainLabel
 

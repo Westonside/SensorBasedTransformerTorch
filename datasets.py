@@ -1,3 +1,8 @@
+import hickle as hkl
+import numpy as np
+from sklearn.model_selection import StratifiedKFold
+
+
 def loadDataset(dataSetName, clientCount, dataConfig, randomSeed, mainDir, StratifiedSplit=True):
     # loading datasets
     clientDataTrain = []
@@ -172,3 +177,19 @@ def loadDataset(dataSetName, clientCount, dataConfig, randomSeed, mainDir, Strat
     dataReturn.clientOrientationTest = clientOrientationTest
     dataReturn.orientationsNames = orientationsNames
     return dataReturn
+
+
+class dataHolder:
+    clientDataTrain = []
+    clientLabelTrain = []
+    clientDataTest = []
+    clientLabelTest = []
+    centralTrainData = []
+    centralTrainLabel = []
+    centralTestData = []
+    centralTestLabel = []
+    clientOrientationTrain = []
+    clientOrientationTest = []
+    orientationsNames = None
+    activityLabels = []
+    clientCount = None
