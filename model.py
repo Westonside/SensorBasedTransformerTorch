@@ -11,8 +11,8 @@ class TransformerModel(nn.Module):
         super().__init__()
         self.model_type = 'Transformer'
 
-        self.projectionHalf = projection_dim // 2
-        self.projectionQuarter = projection_dim // 4
+        self.projection_half = projection_dim // 2
+        self.projection_quarter = projection_dim // 4
         self.dropPathRate = np.linspace(0, dropout_rate * 10, len(convKernels)) * 0.1
         self.transformer_units = [
             projection_dim * 2,
@@ -41,12 +41,20 @@ class TransformerModel(nn.Module):
             self.transform_layers[first_layer_name] = x1
             # next is the multihead attention
 
-            acc_attention_name = f"layer_{layerIndex}_acc_attention"
-            acc_attention = SensorMultiHeadAttention(self.projectionQuarter, num_heads, 0, self.projectionHalf, dropout_rate, self.dropPathRate[layerIndex])
-            self.transform_layers[acc_attention_name] = acc_attention
 
+
+            """
+                Since I am not using the liteformer as the third branch I will have each attention branch be half of the projection dimension
+                because it is half accel and half gyro so each transformer branch will take 100% of each modality
+            """
+
+            acc_attention_name = f"layer_{layerIndex}_acc_attention"
+            #acc attention branch
+            acc_attention = SensorMultiHeadAttention(self.projection_half, num_heads,0,self.projection_half,drop_path_rate=self.dropPathRate[layerIndex],dropout_rate=dropout_rate)
+            self.transform_layers[acc_attention_name] = acc_attention
+            # gyro attention branch
             gyro_attention_name = f"layer_{layerIndex}_gyro_attention"
-            gyro_attention = SensorMultiHeadAttention(self.projectionQuarter, num_heads, self.projectionHalf, projection_dim, dropout_rate, self.dropPathRate[layerIndex])
+            gyro_attention = SensorMultiHeadAttention(self.projection_half, num_heads, self.projection_half,projection_dim, dropout_rate=dropout_rate, drop_path_rate=self.dropPathRate[layerIndex])
             self.transform_layers[gyro_attention_name] = gyro_attention
 
             # the next normalization layer
@@ -95,12 +103,38 @@ class TransformerModel(nn.Module):
         # add the position embedding to the patches
         position_embedded_patches = self.position_embedded_patches(patches)
         # now go throug the transformer layers
-        encoded_patches = torch.tensor([])
-        for layerIndex, moduleName in enumerate(self.transform_layers):
+        encoded_patches = position_embedded_patches
+        past_output = (False, [])
+        for layerIndex, module_name in enumerate(self.transform_layers):
             # get the module
-            print(moduleName, layerIndex)
-            module = self.transform_layers[moduleName]
-            # pass the input through the module
+            print(module_name, layerIndex)
+            module = self.transform_layers[module_name]
+            if "attention" in module_name:
+                #this is the case of a skip connection
+                if layerIndex != len(self.transform_layers)-1 and not past_output[0]: # if not the last connection and it has not informed on skip connection
+                    # mark as skip
+                    out = module(position_embedded_patches, return_attention_scores=True)
+                    past_output = (True, [out])
+                elif past_output[0]:
+                    # use the skip connection
+                    out = module(position_embedded_patches, return_attention_scores=True)
+                    past_output[1].append(out)
+            elif past_output[0]: # you have the end of the skip connection
+                # use the skip connection
+                concat_attention = torch.cat(past_output[1], dim=2)
+                # now add the skip connection to the encoded
+                encoded_patches = encoded_patches + concat_attention
+                # reset the skip connection
+                past_output = (False, [])
+                # apply the layer norm
+                encoded_patches = module(encoded_patches)
+            else:
+                # apply the layer
+                encoded_patches = module(encoded_patches)
+
+
+
+
        # after going through all of the transformer layers, final normalization layer
         norm = self.last_norm(encoded_patches)
         # apply gap
@@ -184,8 +218,8 @@ class SensorMultiHeadAttention(nn.Module):
         super(SensorMultiHeadAttention).__init__()
         self.projectionQuarter = projectionQuarter
         self.num_heads = num_heads
-        self.start_index = startIndex
-        self.stop_index = stopIndex
+        self.start_index = startIndex # the starting index
+        self.stop_index = stopIndex # the stop index of the data to process
         self.dropout_rate = dropout_rate
         self.drop_path_rate = drop_path_rate
         self.attention = nn.MultiheadAttention(embed_dim=projectionQuarter, num_heads=num_heads, dropout=dropout_rate)
