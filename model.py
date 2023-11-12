@@ -21,8 +21,7 @@ class TransformerModel(nn.Module):
         self.flatten = nn.Flatten() # flatten
         #TODO ADD BATCH SIZE
         batch_size = 32
-        self.layer_1 = nn.Linear(batch_size, input_shape[0], input_shape[1])
-        self.input_layer = nn.Linear(in_features=projection_dim, out_features=projection_dim)
+        self.layer_1 = nn.Linear(input_shape[0], out_features=input_shape[1])
         self.transform_layers = nn.ModuleDict() # add items as you go
         self.activation = nn.SiLU()
         self.dropOut = nn.Dropout(dropout_rate)
@@ -67,15 +66,17 @@ class TransformerModel(nn.Module):
             # the multilayer perceptron
             x3_name = f"layer_{layerIndex}_mlp"
             x3 = nn.Sequential(
-                nn.Linear(in_features=patchSize/2, out_features=self.transformer_units[0]),
-                nn.Linear(in_features=pat),
+                nn.Linear(in_features=activityCount, out_features=self.transformer_units[0]),
+                nn.SiLU(),
+                nn.Dropout(dropout_rate),
+                nn.Linear(in_features=self.transformer_units[0], out_features=self.transformer_units[1]),
             )
             self.transform_layers[x3_name] = x3
 
             # the drop path TODO: what is a drop path??
             drop = DropPath(self.dropPathRate[layerIndex])
             self.transform_layers[f"layer_{layerIndex}_drop-path"] = drop
-        self.last_norm = nn.LayerNorm(eps=1e-6, normalized_shape=self.position_embedded_patches.size()[1:])
+        self.last_norm = nn.LayerNorm(eps=1e-6, normalized_shape=activityCount)
         # create the mlp layer
         self.mlp_head = nn.Sequential()
         for layerIndex, units in enumerate(mlp_head_units):
@@ -132,9 +133,6 @@ class TransformerModel(nn.Module):
             else:
                 # apply the layer
                 encoded_patches = module(encoded_patches)
-                if  module_name.endswith("mlp"):
-                    # apply the activation
-
 
 
 

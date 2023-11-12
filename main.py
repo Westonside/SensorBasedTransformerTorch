@@ -14,7 +14,7 @@ from sklearn.utils import class_weight
 def main():
     # Use a breakpoint in the (code line below to debug your script.
     Motion_Sense = [2, 1, 3, 4, 0, 7]
-    ACTIVITY_LABEL = ['Downstairs', 'Upstairs', 'Sitting', 'Standing', 'Walking', 'Jogging']
+    ACTIVITY_LABEL = ['Standing', 'Walking', 'Runing', 'Biking', 'Car', 'Bus', 'Train', 'Subway']
     activity_count= len(ACTIVITY_LABEL)
 
 
@@ -44,7 +44,7 @@ def main():
     #TODO: allow for actually getting the number of clients I am just hard coding for now
     client_count = 24
     # TODO: make a dataloader for the data set
-    main_dir = "../Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/"
+    main_dir = "../HART/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/"
     dataset_loader = loadDataset(data_set_name, client_count, None, None, main_dir)
     central_train_data = dataset_loader.centralTrainData
     central_train_label = dataset_loader.centralTrainLabel
