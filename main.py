@@ -74,7 +74,54 @@ def main():
     learningRate = 3e-4
     optimizer = torch.optim.Adam(model.parameters(), lr=learningRate)
     print(model)
+    for epoch in range(1, local_epoch + 1):
+        # zero the gradients
+        optimizer.zero_grad()
+        train(model, epoch, central_train_data, central_train_label, optimizer)
 
+
+
+def train(model,epoch, train_data,train_label, optimizer, batch_size=32):
+    # print("Training")
+    train_loss = 0.
+    train_acc = 0.
+    correct = 0
+    total = 0
+    model.train()
+    # for i in range(train_data.shape[0]):
+    #     optimizer.zero_grad()
+    #     x = torch.from_numpy(train_data[i]).float()
+    #     y = torch.from_numpy(train_label[i]).float()
+    #     outputs = model(x)
+    #     loss = torch.nn.functional.cross_entropy(outputs, y)
+    #     loss.backward()
+    #     optimizer.step()
+    #     train_loss += loss.item()
+    #     _, predicted = outputs.max(1)
+    #     total += y.size(0)
+    #     correct += predicted.eq(y).sum().item()
+
+    # TODO code for batches
+    permutation = torch.randperm(train_data.shape[0])
+    for i in range(0, train_data.shape[0], batch_size):
+        optimizer.zero_grad()
+        indices = permutation[i:i + batch_size]
+        batch_x, batch_y = train_data[indices], train_label[indices]
+        batch_x = torch.from_numpy(batch_x).float()
+        batch_y = torch.from_numpy(batch_y).float()
+        outputs = model(batch_x)
+        # print(outputs.shape)
+        loss = torch.nn.functional.cross_entropy(outputs, batch_y.long())
+        loss.backward()
+        optimizer.step()
+        train_loss += loss.item()
+        _, predicted = outputs.max(1)
+        total += batch_y.size(0)
+        correct += predicted.eq(batch_y).sum().item()
+        print('Train Epoch: {} | Loss: {:.6f} | Acc: {:.6f}'.format(
+            epoch, train_loss / total, correct / total))
+    print('Train Epoch: {} | Loss: {:.6f} | Acc: {:.6f}'.format(
+        epoch, train_loss / total, correct / total))
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
