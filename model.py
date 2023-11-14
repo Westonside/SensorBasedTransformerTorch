@@ -4,6 +4,51 @@ import numpy as np
 import torch
 from torch import nn, Tensor
 
+"""
+    This will take a code from the end of the module and then it will take the module itself
+    it will also take a dict object that contain the ouputs of branches 
+"""
+def process_module(code , module, branch_outputs: dict):
+    skip_connection = 'skip_connection'
+    # print(code)
+    if "attention" in code:
+        if code.rfind("end") != -1:
+            # if this is the last attention head get the outpu and then concat all attention values
+            output = module(branch_outputs["loop_input"])
+            all_branches = [branch_outputs[value] for value in list(filter(lambda x: "attention_branch" in x, branch_outputs.keys()))] # now you have all the attention outputs
+            concat_attention = torch.concat((output, *all_branches), dim=2) # concat all the attention outputs))
+            #now you will add the patches and the concat attention values
+            branch_outputs["loop_input"] = branch_outputs["encoded_inputs"] + concat_attention
+            # print("end attention and adding skip connection")
+            branch_outputs[skip_connection] =  branch_outputs["loop_input"]
+            # print("end attention")
+        else:
+            # print("start attention") # normal attention
+            branch_outputs["attention_branch"] = module(branch_outputs["loop_input"])
+    elif "norm" in code: # normalization
+        if code.rfind("end") != -1:
+            # print("end normalization")
+            branch_outputs["loop_input"] = module(branch_outputs["loop_input"]) # normalize the input this is x3 in their code
+        else:
+            # print("normalization")
+            branch_outputs["loop_input"] = module(branch_outputs["encoded_inputs"])
+    else:
+        #should be the case of mlp and drop path
+        if "drop-path" in code:
+            branch_outputs["loop_input"] = module(branch_outputs["loop_input"])
+            # perform the skip connection
+            branch_outputs["encoded_inputs"] = branch_outputs["encoded_inputs"] + branch_outputs[skip_connection]
+            new_branch_ouputs = {
+                "encoded_inputs": branch_outputs["encoded_inputs"],
+            }
+            branch_outputs = new_branch_ouputs
+        else:
+            # print('this should only mlp', code)
+            branch_outputs["loop_input"] = module(branch_outputs["loop_input"])
+
+
+
+
 
 class TransformerModel(nn.Module):
 
@@ -40,7 +85,7 @@ class TransformerModel(nn.Module):
                 This is done column wise for all items in the batch
             
             """
-            first_layer_name = f"layer_{layerIndex}_norm"
+            first_layer_name = f"layer_{layerIndex}_norm-0"
             x1 = nn.LayerNorm(eps=1e-6, normalized_shape=projection_dim) # the get the dimensions of the input except the batch size
             self.transform_layers[first_layer_name] = x1
             # next is the multihead attention
@@ -57,7 +102,7 @@ class TransformerModel(nn.Module):
             acc_attention = SensorMultiHeadAttention(self.projection_half, num_heads,0,self.projection_half,drop_path_rate=self.dropPathRate[layerIndex],dropout_rate=dropout_rate)
             self.transform_layers[acc_attention_name] = acc_attention
             # gyro attention branch
-            gyro_attention_name = f"layer_{layerIndex}_gyro_attention"
+            gyro_attention_name = f"layer_{layerIndex}_gyro_attention-end"
             gyro_attention = SensorMultiHeadAttention(self.projection_half, num_heads, self.projection_half,projection_dim, dropout_rate=dropout_rate, drop_path_rate=self.dropPathRate[layerIndex])
             self.transform_layers[gyro_attention_name] = gyro_attention
 
@@ -95,64 +140,36 @@ class TransformerModel(nn.Module):
     def forward(self, src: Tensor) -> Tensor:
         #src = src.cuda()
         # TODO watch out that you are doing the skip connection right and that only one vector is being normalized
+        # TODO only permute what goes in the conv layers and then permute back
+        #TODO make the keras model and pass the input in one by one to see the shape
+        # src = src.permute(0,2,1)
         src = self.layer_1(src)
         # next apply the layer norm
         # src = self.flatten(src) # do i need to flatten?
-        patches = self.patches(src)
+        patches = self.patches(src) # this outputs 3x8x192 in keras
         # apply the position embedding to the patches
-        position_embedded_patches = self.patch_encoder(patches)
+        position_embedded_patches = self.patch_encoder(patches) # this ouputs 32x8x192 in keras
         # now go throug the transformer layers
         encoded_patches = position_embedded_patches
-        past_output = (False, [])
-        secondary_skip = None
+        branch_ouputs = {
+            "encoded_inputs": encoded_patches,
+        }
         for layerIndex, module_name in enumerate(self.transform_layers):
-            # get the module
-            # print(module_name, layerIndex, encoded_patches.shape)
-            module = self.transform_layers[module_name]
-            if "attention" in module_name:
-                #this is the case of a skip connection
-                if layerIndex != len(self.transform_layers)-1 and not past_output[0]: # if not the last connection and it has not informed on skip connection
-                    # mark as skip
-                    out = module(position_embedded_patches)
-                    past_output = (True, [out])
-                elif past_output[0]:
-                    # use the skip connection the
-                    # the transformer model will return the output and the attention scores
-                    out = module(position_embedded_patches)
-                    past_output[1].append(out)
-            elif past_output[0]: # you have the end of the skip connection
-                # print('performing skip connection')
-                # use the skip connection
-                concat_attention = torch.cat(past_output[1], dim=2)
-                # now add the skip connection to the encoded
-                encoded_patches = encoded_patches + concat_attention
-                # reset the skip connection
-                past_output = (False, [])
-                # apply the layer norm
-                encoded_patches = module(encoded_patches)
-                secondary_skip = encoded_patches # store this for after the dropout
-            elif 'drop' in module_name and secondary_skip is not None:
-                # apply the dropout
-                encoded_patches = module(encoded_patches)
-                # now add the drop path encoded with the secondary skip
-                encoded_patches = encoded_patches + secondary_skip
-                secondary_skip = None
-
-
-            else:
-                # apply the layer
-                encoded_patches = module(encoded_patches)
-
-
-
+            code = module_name[module_name.rindex("_"):]
+            process_module(code, self.transform_layers[module_name], branch_ouputs)
+        encoded_patches = branch_ouputs["encoded_inputs"]
+        # print('encoded patches ', encoded_patches.shape)
        # after going through all of the transformer layers, final normalization layer
-        norm = self.last_norm(encoded_patches)
+        norm = self.last_norm(encoded_patches) # 32,8,192 i think it should be the other way around? theirs is 8x192 as well which should probably be swapped in our case
         # apply gap
-        gap = nn.AvgPool1d(norm.size()[1])(norm)
+        # gap = nn.AvgPool1d(norm.size()[1])(norm) # this needs to go to 32x192
+        # gap = nn.AdaptiveAvgPool1d(1)(norm).squeeze()
+        gap = norm.mean(dim=1)
         # pass throug the final multilayer perceptron
         mlp_head = self.mlp_head(gap)
         # pass through the logits
         logits = self.logits(mlp_head)
+        # print('logits ', logits.shape)
         return logits
 
 
@@ -222,6 +239,8 @@ class SensorPatches(nn.Module):
         # print('output of patches 2', gyro.shape)
         projected = torch.cat((acc,gyro),dim=1) #combine the two modalities
         # print('output of patches ', projected.shape)
+        projected = projected.permute(0,2,1)
+
         return projected
 
 class PatchEncoder(nn.Module):
@@ -235,7 +254,7 @@ class PatchEncoder(nn.Module):
         positions = torch.arange(0, self.num_patches, 1) # create a tensor corresponding to position position
         encoded = self.position_embedding(positions) # get the position embedding
         # encoded = input_patch +  encoded # add the position embedding to the input patch
-        input_patch = input_patch.permute(0,2,1)
+        # input_patch = input_patch.permute(0,2,1)
         encoded = input_patch + encoded
         return encoded
 
@@ -300,7 +319,6 @@ class MLP(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
         # permute back to 32x192x8
-        permuted = x.permute(0,2,1)
         return x
 
 
@@ -314,7 +332,7 @@ class MLPHead(nn.Module):
             # Linear layer
             self.mlp_head.add_module(
                 f"mlp_head_{layerIndex}",
-                nn.Linear(units, units), #1024, 1024
+                nn.Linear(192, units), #1024, 1024
             )
             # GELU activation
             self.mlp_head.add_module(
@@ -328,7 +346,7 @@ class MLPHead(nn.Module):
             )
 
     def forward(self, x):
-        print('in the final mlp head layer ', x.shape)
+        # print('in the final mlp head layer ', x.shape)
         # Print input shape before processing through layers
         # print("Input shape:", x.shape) # 32, 8, 24 input shape
         # the issue is 32*8 -> 256, 24
@@ -339,5 +357,6 @@ class MLPHead(nn.Module):
             x = layer(x)
             # Print output shape after each layer
             # print(f"Output shape after {layer.__class__.__name__}:", x.shape)
-
+        # print('output of the final mlp head layer ', x.shape)
         return x
+

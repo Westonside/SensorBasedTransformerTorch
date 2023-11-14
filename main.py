@@ -110,14 +110,16 @@ def train(model,epoch, train_data,train_label, optimizer, batch_size=32):
         batch_x = torch.from_numpy(batch_x).float()
         batch_y = torch.from_numpy(batch_y).float()
         outputs = model(batch_x)
+        # print(outputs)
         # print(outputs.shape)
-        loss = torch.nn.functional.cross_entropy(outputs, batch_y.long())
+        loss = torch.nn.functional.cross_entropy(outputs, batch_y)
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
         _, predicted = outputs.max(1)
         total += batch_y.size(0)
-        correct += predicted.eq(batch_y).sum().item()
+
+        correct += torch.sum(torch.flatten(torch.argmax(batch_y, dim=1) == predicted).to(torch.int)).item()
         print('Train Epoch: {} | Loss: {:.6f} | Acc: {:.6f}'.format(
             epoch, train_loss / total, correct / total))
     print('Train Epoch: {} | Loss: {:.6f} | Acc: {:.6f}'.format(
