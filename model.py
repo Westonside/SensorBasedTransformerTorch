@@ -3,6 +3,7 @@ import math
 import numpy as np
 import torch
 from torch import nn, Tensor
+from torch.nn import ModuleList
 
 """
     This will take a code from the end of the module and then it will take the module itself
@@ -16,11 +17,12 @@ def process_module(code , module, branch_outputs: dict):
             # if this is the last attention head get the outpu and then concat all attention values
             output = module(branch_outputs["loop_input"])
             all_branches = [branch_outputs[value] for value in list(filter(lambda x: "attention_branch" in x, branch_outputs.keys()))] # now you have all the attention outputs
-            concat_attention = torch.concat((output, *all_branches), dim=2) # concat all the attention outputs))
-            #now you will add the patches and the concat attention values
-            branch_outputs["loop_input"] = branch_outputs["encoded_inputs"] + concat_attention
+            if len(all_branches) != 0:
+                concat_attention = torch.concat((output, *all_branches), dim=2) # concat all the attention outputs))
+                #now you will add the patches and the concat attention values
+                branch_outputs["loop_input"] = branch_outputs["encoded_inputs"] + concat_attention
             # print("end attention and adding skip connection")
-            branch_outputs[skip_connection] =  branch_outputs["loop_input"]
+            branch_outputs[skip_connection] = branch_outputs["loop_input"]
             # print("end attention")
         else:
             # print("start attention") # normal attention
@@ -52,24 +54,21 @@ def process_module(code , module, branch_outputs: dict):
 
 class TransformerModel(nn.Module):
 
-    def __init__(self, input_shape, activity_count: int, projection_dim = 192, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+    def __init__(self, input_shape , activity_count: int, modal_count=2, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super().__init__()
         self.model_type = 'Transformer'
-
-        self.projection_half = projection_dim // 2
-        self.projection_quarter = projection_dim // 4
+        self.projection_dim = projection_per_modality * modal_count
+        self.projection_half = self.projection_dim // 2
+        self.projection_quarter = self.projection_dim // 4
         self.dropPathRate = np.linspace(0, dropout_rate * 10, len(convKernels)) * 0.1
         self.transformer_units = [
-            projection_dim * 2,
-            projection_dim, ]
+            self.projection_dim * 2,
+            self.projection_dim, ]
         #make an input layer that takes in the input and projects it to the correct size
         self.flatten = nn.Flatten() # flatten
-        #TODO ADD BATCH SIZE
-        batch_size = 32
-        # self.layer_1 = nn.Linear(input_shape[0], out_features=activity_count)
-        self.layer_1 = nn.Linear(6, out_features=6)
-        self.patches = SensorPatches(projection_dim, patchSize, timeStep)
-        self.patch_encoder = PatchEncoder(num_patches=patchSize, projection_dim=projection_dim)
+        self.layer_1 = nn.Linear(input_shape[1], out_features=input_shape[1])
+        self.patches = SensorPatches(self.projection_dim, patchSize, timeStep)
+        self.patch_encoder = PatchEncoder(num_patches=patchSize, projection_dim=self.projection_dim)
         self.transform_layers = nn.ModuleDict() # add items as you go
         self.activation = nn.SiLU()
         self.dropOut = nn.Dropout(dropout_rate)
@@ -86,7 +85,7 @@ class TransformerModel(nn.Module):
             
             """
             first_layer_name = f"layer_{layerIndex}_norm-0"
-            x1 = nn.LayerNorm(eps=1e-6, normalized_shape=projection_dim) # the get the dimensions of the input except the batch size
+            x1 = nn.LayerNorm(eps=1e-6, normalized_shape=self.projection_dim) # the get the dimensions of the input except the batch size
             self.transform_layers[first_layer_name] = x1
             # next is the multihead attention
 
@@ -96,19 +95,31 @@ class TransformerModel(nn.Module):
                 Since I am not using the liteformer as the third branch I will have each attention branch be half of the projection dimension
                 because it is half accel and half gyro so each transformer branch will take 100% of each modality
             """
+            projection_attention_position = (0, self.projection_half)
+            for modal in range(modal_count):
+                attention_name = f"layer_{layerIndex}_modal{modal}_attention"
+                if modal == modal_count - 1:
+                    attention_name = f"layer_{layerIndex}_modal{modal}_attention-end"
+                    # for the case of the last modal you should add in the skip connection
+                sensor_wise_attention = SensorMultiHeadAttention(self.projection_half, num_heads, projection_attention_position[0],
+                                                          projection_attention_position[1], dropout_rate=dropout_rate,
+                                                          drop_path_rate=self.dropPathRate[layerIndex])
+                self.transform_layers[attention_name] = sensor_wise_attention
+                projection_attention_position = (projection_attention_position[1], self.projection_half+projection_per_modality)
 
-            acc_attention_name = f"layer_{layerIndex}_acc_attention"
-            #acc attention branch
-            acc_attention = SensorMultiHeadAttention(self.projection_half, num_heads,0,self.projection_half,drop_path_rate=self.dropPathRate[layerIndex],dropout_rate=dropout_rate)
-            self.transform_layers[acc_attention_name] = acc_attention
-            # gyro attention branch
-            gyro_attention_name = f"layer_{layerIndex}_gyro_attention-end"
-            gyro_attention = SensorMultiHeadAttention(self.projection_half, num_heads, self.projection_half,projection_dim, dropout_rate=dropout_rate, drop_path_rate=self.dropPathRate[layerIndex])
-            self.transform_layers[gyro_attention_name] = gyro_attention
+
+            # acc_attention_name = f"layer_{layerIndex}_acc_attention"
+            # #acc attention branch
+            # acc_attention = SensorMultiHeadAttention(self.projection_half, num_heads,0,self.projection_half,drop_path_rate=self.dropPathRate[layerIndex],dropout_rate=dropout_rate)
+            # self.transform_layers[acc_attention_name] = acc_attention
+            # # gyro attention branch
+            # gyro_attention_name = f"layer_{layerIndex}_gyro_attention-end"
+            # gyro_attention = SensorMultiHeadAttention(self.projection_half, num_heads, self.projection_half,self.projection_dim, dropout_rate=dropout_rate, drop_path_rate=self.dropPathRate[layerIndex])
+            # self.transform_layers[gyro_attention_name] = gyro_attention
 
             # the next normalization layer
             x2_name = f"layer_{layerIndex}_2_norm"
-            x2 = nn.LayerNorm(eps=1e-6, normalized_shape=projection_dim)
+            x2 = nn.LayerNorm(eps=1e-6, normalized_shape=self.projection_dim)
             self.transform_layers[x2_name] = x2
 
             # the multilayer perceptron
@@ -174,7 +185,7 @@ class TransformerModel(nn.Module):
 
 
 class SensorPatches(nn.Module):
-    def __init__(self,projection_dim,patchSize,timeStep):
+    def __init__(self,projection_dim,patchSize,timeStep, num_modal=2):
         """
                 This applies 1D convolution to the input data to project it to the correct size
                 1D Convolutional works by:
@@ -214,9 +225,15 @@ class SensorPatches(nn.Module):
             
         """''
         # projection_dim/2 = 96 patchsize = 16 timestep = 16
-        self.modal1_project = nn.Conv1d(in_channels=3, out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep)
+        self.projectors = ModuleList()
+        self.num_modal = num_modal
+        # torch.manual_seed(123)
+        for modal in range(num_modal):
+            self.projectors.append(nn.Conv1d(in_channels=3, out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep))
 
-        self.modal2_project = nn.Conv1d(in_channels=3,out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep)
+        # self.modal1_project = nn.Conv1d(in_channels=3, out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep)
+        #
+        # self.modal2_project = nn.Conv1d(in_channels=3,out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep)
 
     def forward(self, inp):
         # output from hart, they do not batch the data
@@ -227,21 +244,38 @@ class SensorPatches(nn.Module):
         # in_acc = self.flatten(in_acc) # if the data is not 1D then may need to flatten
         # in_gyro = self.flatten(in_gyro)
         # inp = inp.unsqueeze(0)
-        acc_data = inp[:,:,:3]
-        gyro_dat = inp[:,:,3:]
 
-        acc_data = acc_data.permute(0,2,1)
-        gyro_dat = gyro_dat.permute(0,2,1)
 
-        acc = self.modal1_project(acc_data) # pass in the first element of the input corresponding to the accelerometer up to 3
-        # print('output of patches 1', acc.shape)
-        gyro = self.modal2_project(gyro_dat)# pass in the last 3 channels corresponding to gyro from 3
-        # print('output of patches 2', gyro.shape)
-        projected = torch.cat((acc,gyro),dim=1) #combine the two modalities
-        # print('output of patches ', projected.shape)
-        projected = projected.permute(0,2,1)
 
-        return projected
+        projection_position = (0, 3) #we are assuming only trimodal inputs
+        patch_outputs = []
+        for projectors in self.projectors:
+            in_data = inp[:, :, projection_position[0]:projection_position[1]]
+            in_data = in_data.permute(0,2,1)
+            patch_outputs.append(projectors(in_data))
+            projection_position = (projection_position[1], projection_position[1]+3)
+
+        # at the end you want to concat the outputs and then permute back
+        concat_proj = torch.cat(patch_outputs, dim=1)
+        full_proj = concat_proj.permute(0,2,1)
+        return full_proj
+
+        # acc_data = inp[:,:,:3]
+        # gyro_dat = inp[:,:,3:]
+        #
+        # acc_data = acc_data.permute(0,2,1)
+        # gyro_dat = gyro_dat.permute(0,2,1)
+        #
+        # acc = self.modal1_project(acc_data) # pass in the first element of the input corresponding to the accelerometer up to 3
+        # # print('output of patches 1', acc.shape)
+        # gyro = self.modal2_project(gyro_dat)# pass in the last 3 channels corresponding to gyro from 3
+        # # print('output of patches 2', gyro.shape)
+        # projected = torch.cat((acc,gyro),dim=1) #combine the two modalities
+        # # print('output of patches ', projected.shape)
+        # projected = projected.permute(0,2,1)
+        #
+        #
+        # return projected
 
 class PatchEncoder(nn.Module):
     def __init__(self, num_patches:int, projection_dim, **kwargs):
