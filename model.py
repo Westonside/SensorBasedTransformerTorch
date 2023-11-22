@@ -54,7 +54,7 @@ def process_module(code , module, branch_outputs: dict):
 
 class TransformerModel(nn.Module):
 
-    def __init__(self, input_shape , activity_count: int, modal_count=2, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+    def __init__(self, input_shape ,  modal_count=2, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super().__init__()
         self.model_type = 'Transformer'
         self.projection_dim = projection_per_modality * modal_count
@@ -67,7 +67,7 @@ class TransformerModel(nn.Module):
         #make an input layer that takes in the input and projects it to the correct size
         self.flatten = nn.Flatten() # flatten
         self.layer_1 = nn.Linear(input_shape[1], out_features=input_shape[1])
-        self.patches = SensorPatches(self.projection_dim, patchSize, timeStep)
+        self.patches = SensorPatches(self.projection_dim, patchSize, timeStep, num_modal=modal_count)
         self.patch_encoder = PatchEncoder(num_patches=patchSize, projection_dim=self.projection_dim)
         self.transform_layers = nn.ModuleDict() # add items as you go
         self.activation = nn.SiLU()
@@ -130,17 +130,15 @@ class TransformerModel(nn.Module):
             #     nn.Dropout(dropout_rate),
             #     nn.Linear(in_features=self.transformer_units[0], out_features=self.transformer_units[1]),
             # )
-            x3 = MLP(activity_count, self.transformer_units, dropout_rate)
+            x3 = MLP(self.projection_dim, self.transformer_units, dropout_rate)
             self.transform_layers[x3_name] = x3
 
             # the drop path TODO: what is a drop path??
             drop = DropPath(self.dropPathRate[layerIndex])
             self.transform_layers[f"layer_{layerIndex}_drop-path"] = drop
-        self.last_norm = nn.LayerNorm(eps=1e-6, normalized_shape=192)
+        self.last_norm = nn.LayerNorm(eps=1e-6, normalized_shape=self.projection_dim)
         # create the mlp layer
-        self.mlp_head = MLPHead(mlp_head_units, dropout_rate)
-        # self.logits = nn.Linear(mlp_head_units[-1], activity_count)
-        self.logits = nn.Linear(mlp_head_units[-1], activity_count) #TODO remove the magic numbers i put in to get everything running
+        self.mlp_head = MLPHead(self.projection_dim, mlp_head_units, dropout_rate)
 
     def init_weights(self) -> None:
         initrange = 0.1
@@ -179,9 +177,50 @@ class TransformerModel(nn.Module):
         # pass throug the final multilayer perceptron
         mlp_head = self.mlp_head(gap)
         # pass through the logits
-        logits = self.logits(mlp_head)
-        # print('logits ', logits.shape)
+        return mlp_head # return the value from the mlp head
+        # logits = self.logits(mlp_head)
+        # # print('logits ', logits.shape)
+        # return logits
+
+class TransformerClassificationModel(nn.Module):
+    def __init__(self,input_shape , activity_count: int,  modal_count=2, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+        super(TransformerClassificationModel,self).__init__()
+        self.transformer_core = TransformerModel(input_shape, modal_count, projection_per_modality, patchSize, timeStep, num_heads, filterAttentionHead, convKernels, mlp_head_units, dropout_rate, useTokens)
+        self.logits = nn.Linear(mlp_head_units[-1], activity_count)
+        self.softmax = nn.Softmax(dim=1)
+    def forward(self, x):
+        x = self.transformer_core(x)
+        logits = self.logits(x)
+        # put the logits through the softmax
+        logits = self.softmax(logits)
         return logits
+
+class TransformerMultiTaskBinaryClassificationModel(nn.Module):
+    def __init__(self, input_shape, classification_heads:int, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+        super(TransformerMultiTaskBinaryClassificationModel, self).__init__()
+        # now we need to
+        self.transformer_core = TransformerModel(input_shape, modal_count=1, patchSize=patchSize, timeStep=timeStep, num_heads=num_heads, filterAttentionHead=filterAttentionHead, convKernels=convKernels, mlp_head_units=mlp_head_units, dropout_rate=dropout_rate, useTokens=useTokens)
+        self.classification_heads = ModuleList()
+        self.softmax = nn.Softmax(dim=1)
+        self.outputs_secondary = 512
+        for _ in range(classification_heads):
+            self.classification_heads.append(
+                nn.Sequential(
+                    nn.Linear(mlp_head_units[-1], self.outputs_secondary),
+                    nn.ReLU(),
+                    nn.Linear(self.outputs_secondary, 1),
+                    nn.Sigmoid()
+                )
+            )
+
+    def forward(self, x):
+        x = self.transformer_core(x)
+        outputs = []
+        for head in self.classification_heads:
+            outputs.append(head(x))
+        return torch.dstack(outputs).squeeze()
+
+
 
 
 class SensorPatches(nn.Module):
@@ -229,7 +268,7 @@ class SensorPatches(nn.Module):
         self.num_modal = num_modal
         # torch.manual_seed(123)
         for modal in range(num_modal):
-            self.projectors.append(nn.Conv1d(in_channels=3, out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep))
+            self.projectors.append(nn.Conv1d(in_channels=3, out_channels=int(projection_dim/num_modal), kernel_size=patchSize, stride=timeStep))
 
         # self.modal1_project = nn.Conv1d(in_channels=3, out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep)
         #
@@ -337,10 +376,10 @@ class SensorMultiHeadAttention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, activity_count, transformer_units, dropout_rate):
+    def __init__(self, input_features, transformer_units, dropout_rate):
         super(MLP, self).__init__()
 
-        self.layer1 = nn.Linear(in_features=192, out_features=transformer_units[0])
+        self.layer1 = nn.Linear(in_features=input_features, out_features=transformer_units[0])
         self.layer2 = nn.SiLU()
         self.layer3 = nn.Dropout(dropout_rate)
         self.layer4 = nn.Linear(in_features=transformer_units[0], out_features=transformer_units[1])
@@ -358,7 +397,7 @@ class MLP(nn.Module):
 
 
 class MLPHead(nn.Module):
-    def __init__(self, mlp_head_units, dropout_rate):
+    def __init__(self, projection_dim:int, mlp_head_units, dropout_rate):
         super(MLPHead, self).__init__()
 
         self.mlp_head = nn.Sequential()
@@ -366,7 +405,7 @@ class MLPHead(nn.Module):
             # Linear layer
             self.mlp_head.add_module(
                 f"mlp_head_{layerIndex}",
-                nn.Linear(192, units), #1024, 1024
+                nn.Linear(projection_dim, units), #1024, 1024
             )
             # GELU activation
             self.mlp_head.add_module(

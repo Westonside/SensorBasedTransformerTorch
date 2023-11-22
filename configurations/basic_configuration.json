@@ -1,0 +1,17 @@
+{
+  "configurations": [
+    {
+      "type": "transformation_classification",
+      "load_files": ["MotionSense"],
+      "modalities": "accelerometer",
+      "epochs": 80,
+      "early_stopping": true
+    },
+    {
+      "type": "multi_modal_clustering",
+      "modalities": ["accelerometer", "gyroscope"],
+      "load_files": ["MotionSense"],
+      "epochs": 80
+    }
+  ]
+}

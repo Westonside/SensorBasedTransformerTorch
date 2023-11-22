@@ -3,16 +3,23 @@ import numpy as np
 import torch.nn.functional
 
 from datasets import loadDataset
-from model import TransformerModel
+from model import TransformerModel, TransformerClassificationModel
 from sklearn.model_selection import train_test_split
 from sklearn.utils import class_weight
+
+from training.pretext_tasks import match_configuration, Classification_Task
+from utils import configuration_utils
+from preprocess.dataset_loading import load_datasets
+from utils.configuration_utils import match_config_modal, modals
+
 
 # Press ⌃R to execute it or replace it with your code.
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
 
 
-def main():
+def main(configuration_file: str):
     # Use a breakpoint in the (code line below to debug your script.
+    config = (configuration_utils.load_configuration(configuration_file))
     Motion_Sense = [2, 1, 3, 4, 0, 7]
     ACTIVITY_LABEL = ['Standing', 'Walking', 'Runing', 'Biking', 'Car', 'Bus', 'Train', 'Subway']
     activity_count= len(ACTIVITY_LABEL)
@@ -63,55 +70,58 @@ def main():
 
 
     # get the one hot of the labels
-    central_train_label = torch.nn.functional.one_hot(torch.from_numpy(central_train_label), num_classes=activity_count).numpy()
-    central_test_label = torch.nn.functional.one_hot(torch.from_numpy(central_test_label), num_classes=activity_count).numpy()
-    central_dev_label = torch.nn.functional.one_hot(torch.from_numpy(central_dev_label), num_classes=activity_count).numpy()
+    # central_train_label = torch.nn.functional.one_hot(torch.from_numpy(central_train_label), num_classes=activity_count).numpy()
+    # central_test_label = torch.nn.functional.one_hot(torch.from_numpy(central_test_label), num_classes=activity_count).numpy()
+    # central_dev_label = torch.nn.functional.one_hot(torch.from_numpy(central_dev_label), num_classes=activity_count).numpy()
 
 
-    model = TransformerModel(input_shape,activity_count)
+
+
+    # model = TransformerClassificationModel(input_shape,activity_count, modal_count=2)
 
     # define the optimizer here
     learningRate = 3e-4
-    optimizer = torch.optim.Adam(model.parameters(), lr=learningRate)
-    print(model)
-    for epoch in range(1, local_epoch + 1):
-        # zero the gradients
-        optimizer.zero_grad()
-        train(model, epoch, central_train_data, central_train_label, optimizer)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=learningRate)
+    # print(model)
+    training_tasks = []
+
+    dataset = load_datasets(["MotionSense"], path="./datasets/processed")
+
+
+    # task = Classification_Task(dataset, save_path="./", previous_task_path=None, epochs=80, early_stop=False)
+    # task.train()
+
+    for configuration in config['configurations']:
+        # for training_tasks in  training_tasks:
+        print(configuration)
+        dataset = load_datasets(["MotionSense"], path="./datasets/processed")
+
+        task = match_configuration(configuration, 'type')
+        modal = match_config_modal(configuration, 'modalities')
+        if modal is not None:
+            modal_range = modals[modal]
+            task = task(dataset, modal_range)
+            task.train()
+
+        # for epoch in range(1, local_epoch + 1): #TODO: implement early stopping
+        #     # zero the gradients
+        #     optimizer.zero_grad()
+        #     train_epoch(model, epoch, central_train_data, central_train_label, optimizer, torch.nn.functional.cross_entropy)
 
 
 
-def train(model,epoch, train_data,train_label, optimizer, batch_size=32):
-    # print("Training")
-    train_loss = 0.
-    train_acc = 0.
-    correct = 0
-    total = 0
-    model.train()
 
-    permutation = torch.randperm(train_data.shape[0])
-    for i in range(0, train_data.shape[0], batch_size):
-        optimizer.zero_grad()
-        indices = permutation[i:i + batch_size]
-        batch_x, batch_y = train_data[indices], train_label[indices]
-        batch_x = torch.from_numpy(batch_x).float()
-        batch_y = torch.from_numpy(batch_y).float()
-        outputs = model(batch_x)
-        loss = torch.nn.functional.cross_entropy(outputs, batch_y)
-        loss.backward()
-        optimizer.step()
-        train_loss += loss.item()
-        _, predicted = outputs.max(1)
-        total += batch_y.size(0)
 
-        correct += torch.sum(torch.flatten(torch.argmax(batch_y, dim=1) == predicted).to(torch.int)).item()
-        print('Train Epoch: {} | Loss: {:.6f} | Acc: {:.6f}'.format(
-            epoch, train_loss / total, correct / total))
-    print('Train Epoch: {} | Loss: {:.6f} | Acc: {:.6f}'.format(
-        epoch, train_loss / total, correct / total))
+
+
+
+
+
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    main()
+    configuration_file = "./configurations/basic_configuration.json"
+    main(configuration_file)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
