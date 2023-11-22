@@ -36,13 +36,14 @@ class BinaryClassificationFormatter(OutputFormatter):
 
     def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch):
         predictions = (pred > 0.5).float()
-        correct_predictions = (predictions == target).float()
-        for i in range(pred.shape[1]):
-            correct,total = self.class_accuracy[i]
-            total += correct_predictions.shape[0]
-            correct += torch.count_nonzero(correct_predictions[:,i]).item()
-            self.class_accuracy[i] = (correct,total)
+        print('testing')
+        for x in range(pred.shape[1]):
+            correct, total = self.class_accuracy[x]
+            total += predictions.shape[0]
+            correct += torch.count_nonzero(predictions[:,x]==target[:,x]).item()
+            self.class_accuracy[x] = (correct,total)
         super().print_accuracy(epoch)
+
 
     def print_accuracy(self, epoch: int, batch=None):
         print('Train Epoch: {} | Acc: {}'.format(
