@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from UserDataLoader import UserDataLoader
 from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel
 from utils.model_utils import train_epoch, MultiTaskLoss, SingleClassificationFormatter, BinaryClassificationFormatter
-from utils.transformation_utils import transform_funcs_vectorized
+from utils.transformation_utils import transform_funcs_vectorized, transform_funcs_names
 
 
 def pretext_one():
@@ -56,11 +56,19 @@ class Training_Task:
     def get_output_formatter(self):
         pass
 
+
+    def get_training_data(self):
+        pass
+
     def train(self):
+        # move the device to gpu
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
         self.train_task_setup()  # will set up the training
         optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+        training, training_label = self.get_training_data()
         for epoch in range(1, self.epochs + 1):
-            train_epoch(self.model, epoch, self.dataset.train, self.dataset.train_label, output_formatter=self.get_output_formatter(),
+            train_epoch(self.model, epoch, training, training_label, output_formatter=self.get_output_formatter(),
                         optimizer=optimizer, loss_fn=self.get_loss())
             # self.save_model()
         self.save_model()
@@ -84,6 +92,10 @@ class Classification_Task(Training_Task):
     def train_task_setup(self):
         pass
 
+
+    def get_training_data(self):
+        return self.dataset.train, self.dataset.train_label
+
     def get_output_formatter(self):
         return SingleClassificationFormatter()
 
@@ -106,20 +118,24 @@ class Transformation_Classification_Task(Training_Task):
     def train_task_setup(self):
         # this will set up the trainin
         self.dataset.keep_modalities(self.modal_range)  # keep the modalities
-        self.dataset.transform_sets(0, self.transformations)  # transform the training data
-        self.dataset.transform_sets(2, self.transformations)  # transform the validation data
+        self.dataset.transform_sets(self.transformations)  # transform the data
 
     def create_model(self):
         #TODO: ALLLOW PASSING IN OTHER  transformations
         #TODO: remove the magic number
         self.model = TransformerMultiTaskBinaryClassificationModel((128,3), len(transform_funcs_vectorized))
 
+
+    def get_training_data(self):
+        return self.dataset.transform_train, self.dataset.transform_label
+
+
     def get_loss(self):
         return MultiTaskLoss(len(self.transformations))
 
 
     def get_output_formatter(self):
-        return BinaryClassificationFormatter(len(self.transformations), [func.__name__ for func in self.transformations])
+        return BinaryClassificationFormatter(len(self.transformations), transform_funcs_names)
 
 def match_configuration(config, key):
     if config.get(key) is None:

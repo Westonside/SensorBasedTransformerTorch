@@ -5,6 +5,9 @@ import numpy as np
 from sympy.physics.quantum.identitysearch import scipy
 from torch.utils.data import Dataset, DataLoader
 
+from utils.transformation_utils import transform_funcs_names
+
+
 class UserDataLoader(Dataset):
     def __init__(self, train_data,  test_data,  classes, validation_data=None):
         self.train, self.train_label = train_data
@@ -20,15 +23,19 @@ class UserDataLoader(Dataset):
 
 
 
-    def transform_sets(self, transformation_data_target: int, transformation_functions: list):
-        if transformation_data_target > 2:
-            raise ValueError("The transformation data target must be less than 2")
-        if transformation_data_target == 0:
-            self.train,self.train_label = self.generate_transform_data(self.train, transformation_functions)
-        if transformation_data_target == 1:
-            self.test,self.test_label = self.generate_transform_data(self.test, transformation_functions)
-        if transformation_data_target == 2:
-            self.validation,self.validation_label = self.generate_transform_data(self.validation, transformation_functions)
+    def transform_sets(self, transformation_functions: list):
+        # this function will join the validation and the training together and then perform the transformations
+        # then it will split the data back into the validation and training sets
+
+        if hasattr(self, 'validation'):
+            self.train = np.concatenate((self.train, self.validation), axis=0)
+            self.train_label = np.concatenate((self.train_label, self.validation_label), axis=0)
+            self.transform_train, self.transform_label = self.generate_transform_data(self.train, transformation_functions)
+            # now that you have generated the transformations, you need to split the data back into the validation and training sets
+            multi_task_transform = (self.transform_train, (map_multitask_y(self.transform_label, transform_funcs_names)))
+            multi_task_split = multitask_train_test_split(multi_task_transform, test_size=0.1, random_seed=42) #split the tranformed data
+            self.transform_train, self.transform_label, self.transform_validation, self.transform_validation_label = multi_task_split
+
 
     def generate_transform_data(self, data, transformation_functions: list, num_copies=1):
         # this will go through the data and then apply the transformations
@@ -71,4 +78,17 @@ class UserDataLoader(Dataset):
         if hasattr(self, 'validation'):
             self.validation = self.validation[:,:,modal_range]
 
+def map_multitask_y(y, output_tasks):
+    multitask_y = {} # create a dictionary
+    for i, task in enumerate(output_tasks): # for the number of output labels that correspond to the transformation function
+        multitask_y[task] = y[:, i] # add the value at the task to be all rows and select all values in column i and so multitask_y['noised']=[] this will return a 1D array that has a value that indicates if the coreresponding sample has had the corresponding transformation applied or not
+    return multitask_y
 
+
+def multitask_train_test_split(dataset, test_size=0.1, random_seed=42):
+    dataset_size = len(dataset[0]) # get the size of the sensor data
+    indices = np.arange(dataset_size) #creates array of ints from [0-dataset_size)
+    np.random.seed(random_seed) #ccreate the seed so you can always have the same seed
+    np.random.shuffle(indices) #shuffle the indicies
+    test_dataset_size = int(dataset_size * test_size) #int of the total training set size using the split
+    return dataset[0][indices[test_dataset_size:]], dict([(k, v[indices[test_dataset_size:]]) for k, v in dataset[1].items()]), dataset[0][indices[:test_dataset_size]], dict([(k, v[indices[:test_dataset_size]]) for k, v in dataset[1].items()])

@@ -177,3 +177,6 @@ transform_funcs_vectorized = [
         time_warp_transform_low_cost,
         channel_shuffle_transform_vectorized
     ]
+
+transform_funcs_names = ['noised', 'scaled', 'rotated', 'negated', 'time_flipped', 'permuted', 'time_warped',
+                         'channel_shuffled']  # add lables for all the transformation functions

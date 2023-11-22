@@ -6,12 +6,13 @@ class MultiTaskLoss(nn.Module):
     def __init__(self, num_tasks: int):
         super(MultiTaskLoss, self).__init__()
         self.losses = nn.BCEWithLogitsLoss(reduction='sum')
+        self.loss = nn.BCEWithLogitsLoss(reduction='sum')
         self.class_accuracy = [0 for _ in range(num_tasks)]
         self.total = 0
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor):
-        return self.losses(pred,target)
-
+        loss = self.loss(pred, target)
+        return loss
 
 
 class OutputFormatter:
@@ -84,9 +85,9 @@ def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, outpu
     for i in range(0, train_data.shape[0], batch_size):
         optimizer.zero_grad()
         indices = permutation[i:i + batch_size]
-        batch_x, batch_y = train_data[indices], train_label[indices]
+        batch_x, batch_y = train_data[indices], torch.from_numpy(train_label[indices]) if type(train_label) is not dict else torch.tensor([[train_label[x][i] for x in train_label.keys()] for i in indices])
         batch_x = torch.from_numpy(batch_x).float()
-        batch_y = torch.from_numpy(batch_y).float()
+        batch_y = (batch_y).float()
         outputs = model(batch_x)
         # pred = torch.argmax(outputs, dim=1)
         loss = loss_fn(outputs, batch_y)
@@ -94,3 +95,6 @@ def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, outpu
         loss.backward()
         optimizer.step()
         output_formatter.get_accuracy(outputs, batch_y, epoch)
+
+
+

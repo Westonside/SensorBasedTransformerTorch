@@ -1,6 +1,7 @@
 import os
 import threading
 import hickle as hkl
+import torch
 from scipy import signal
 import numpy as np
 import pandas as pd
@@ -47,7 +48,7 @@ def main():
     clientCount = len(deviceCounts) * len(userCounts)
     deviceIndexes = {new_list: [] for new_list in range(len(deviceCounts))}
     indexOffset = 0
-
+    # for every device get the clients that used it and
     for clientDeviceIndex, deviceName in enumerate(deviceCounts):
         print("Processsing device " + str(deviceName))
         for clientIDIndex, clientIDName in enumerate(userCounts):
@@ -55,9 +56,9 @@ def main():
 
             processedClassData = []
             processedClassLabel = []
-            dataIndex = (unprocessedAccData[:, 6] == clientIDName) & (unprocessedAccData[:, 7] == deviceName)
+            dataIndex = (unprocessedAccData[:, 6] == clientIDName) & (unprocessedAccData[:, 7] == deviceName) # get the data it is the client and the device
             userDeviceDataAcc = unprocessedAccData[dataIndex]
-            if (len(userDeviceDataAcc) == 0):
+            if (len(userDeviceDataAcc) == 0): # if they don't use that device
                 print("No acc data found")
                 print("Skipping device :" + str(deviceName) + " Client: " + str(clientIDName))
                 indexOffset += 1
@@ -147,31 +148,27 @@ def main():
         # Vertically stack the padded arrays
         deviceData = np.vstack(padded_arrays)
 
-        # deviceData = np.vstack(np.array([row for row in allProcessedData[startIndex:endIndex]]))
-        # max_length = max(len(row) for row in allProcessedData)
-        #
-        # # Create a masked array with NaN as fill_value
-        # masked_arrays = [
-        #     np.ma.masked_invalid(np.pad(row, (0, max_length - len(row)), mode='constant', constant_values=np.nan)) for
-        #     row in allProcessedData]
-        #
-        # # Vertically stack the masked arrays
-        # deviceData = np.vstack(masked_arrays)
-        # deviceData = np.vstack(allProcessedData[startIndex:endIndex])
-        # deviceData
         deviceDataAcc = deviceData[:, :, :3].astype(np.float32)
         deviceDataGyro = deviceData[:, :, 3:].astype(np.float32)
-        accMean = np.mean(deviceDataAcc)
-        accStd = np.std(deviceDataAcc)
-        gyroMean = np.mean(deviceDataGyro)
-        gyroStd = np.std(deviceDataGyro)
+        accMean = np.nanmean(deviceDataAcc)
+        accStd = np.nanstd(deviceDataAcc)
+        gyroMean = np.nanmean(deviceDataGyro)
+        gyroStd = np.nanstd(deviceDataGyro)
         deviceDataAcc = (deviceDataAcc - accMean) / accStd
         deviceDataGyro = (deviceDataGyro - gyroMean) / gyroStd
         deviceData = np.dstack((deviceDataAcc, deviceDataGyro))
+
+
         normalizedData.append(deviceData)
 
-        normalizedData = np.vstack(normalizedData)
 
+
+        target_nan = np.isnan(deviceData)
+        # now that we found the nan values
+        # we replace them with -inf
+        deviceData[target_nan] = -torch.inf
+        # these values will be masked in the attention layer
+        normalizedData = np.vstack(normalizedData)
         # In[ ]:
 
         startIndex = 0
@@ -180,6 +177,7 @@ def main():
         os.makedirs('../datasets/processed/' + dataName, exist_ok=True)
         # clientRange
         for i, dataRange in enumerate(clientRange):
+            print(normalizedData[startIndex:endIndex].shape, allProcessedLabel[i].shape)
             startIndex = endIndex
             endIndex = startIndex + dataRange
             hkl.dump(normalizedData[startIndex:endIndex],
@@ -230,6 +228,9 @@ def consecutive(data, treshHoldSplit,stepsize=1):
     splittedData = np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
     returnResults= [newArray for newArray in splittedData if len(newArray)>=treshHoldSplit]
     return returnResults
+
+
+
 
 if __name__ == '__main__':
     main()
