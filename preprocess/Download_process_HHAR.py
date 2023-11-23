@@ -56,9 +56,9 @@ def main():
 
             processedClassData = []
             processedClassLabel = []
-            dataIndex = (unprocessedAccData[:, 6] == clientIDName) & (unprocessedAccData[:, 7] == deviceName) # get the data it is the client and the device
+            dataIndex = (unprocessedAccData[:, 6] == clientIDName) & (unprocessedAccData[:, 7] == deviceName)
             userDeviceDataAcc = unprocessedAccData[dataIndex]
-            if (len(userDeviceDataAcc) == 0): # if they don't use that device
+            if (len(userDeviceDataAcc) == 0):
                 print("No acc data found")
                 print("Skipping device :" + str(deviceName) + " Client: " + str(clientIDName))
                 indexOffset += 1
@@ -94,13 +94,17 @@ def main():
             allProcessedLabel[dataIndex] = np.hstack((processedClassLabel))
             deviceIndex[dataIndex] = np.full(allProcessedLabel[dataIndex].shape[0], clientDeviceIndex)
             deviceIndexes[clientDeviceIndex].append(dataIndex)
+    #             print(str(len(allProcessedData)) + " at "+ str(clientIDName) + " and device " + str(deviceName))
+    #             print(allProcessedLabel[(clientIDIndex * 6) + clientDataIndex].shape)
 
-    allProcessedData = list(allProcessedData.values()) #TODO FIX ME
-    # allProcessedData = np.asarray(list(allProcessedData.items()))[:, 1] #TODO FIX ME
-    allProcessedLabel = list(allProcessedLabel.values())
-    # allProcessedLabel = np.asarray(list(allProcessedLabel.items()))[:, 1]
-    # deviceIndex = np.asarray(list(deviceIndex.items()))[:, 1]
-    deviceIndex = list(deviceIndex.values())
+    # In[ ]:
+
+    allProcessedData = np.asarray(list(allProcessedData.items()))[:, 1]
+    allProcessedLabel = np.asarray(list(allProcessedLabel.items()))[:, 1]
+    deviceIndex = np.asarray(list(deviceIndex.items()))[:, 1]
+
+    # In[ ]:
+
     deleteIndex = []
     for index, i in enumerate(allProcessedLabel):
         if (len(np.unique(i)) < len(classCounts)):
@@ -110,16 +114,16 @@ def main():
             for key, value in dict(deviceIndexes).items():
                 if (value.count(index)):
                     value.remove(index)
-    # allProcessedLabel = np.delete(allProcessedLabel, deleteIndex)
-    # allProcessedData = np.delete(allProcessedData, deleteIndex)
-    allProcessedLabel = [value for index, value in enumerate(allProcessedLabel) if index not in deleteIndex]
-    allProcessedData = [value for index, value in enumerate(allProcessedData) if index not in deleteIndex]
-    deviceIndex = [value for index, value in enumerate(deviceIndex) if index not in deleteIndex]
-    # deviceIndex = np.delete(deviceIndex, deleteIndex)
+    allProcessedLabel = np.delete(allProcessedLabel, deleteIndex)
+    allProcessedData = np.delete(allProcessedData, deleteIndex)
+    deviceIndex = np.delete(deviceIndex, deleteIndex)
 
-
+    # In[ ]:
 
     clientRange = [len(arrayLength) for arrayLength in allProcessedLabel]
+
+    # In[ ]:
+
     deviceSize = []
     for key, value in dict(deviceIndexes).items():
         deviceSize.append(len(value))
@@ -127,7 +131,6 @@ def main():
     # In[ ]:
 
     normalizedData = []
-
     # In[ ]:
 
     endIndex = 0
@@ -136,18 +139,8 @@ def main():
         endIndex += i
         #     print(startIndex)
         #     print(endIndex)
-        if len(allProcessedData[startIndex:endIndex]) == 0:
-            continue
 
-        max_rows = max(arr.shape[0] for arr in allProcessedData[startIndex:endIndex])
-        max_columns = max(arr.shape[1] for arr in allProcessedData[startIndex:endIndex])
-
-        # Pad only the first dimension (rows) of the selected rows in allProcessedData
-        padded_arrays =[np.pad(arr, ((0,max_rows-arr.shape[0]), (0,0), (0,0)), mode='constant', constant_values=np.nan) for arr in allProcessedData[startIndex:endIndex]]
-
-        # Vertically stack the padded arrays
-        deviceData = np.vstack(padded_arrays)
-
+        deviceData = np.vstack(allProcessedData[startIndex:endIndex])
         deviceDataAcc = deviceData[:, :, :3].astype(np.float32)
         deviceDataGyro = deviceData[:, :, 3:].astype(np.float32)
         accMean = np.nanmean(deviceDataAcc)

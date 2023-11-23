@@ -58,7 +58,7 @@ class TransformerModel(nn.Module):
         super().__init__()
         self.model_type = 'Transformer'
         self.projection_dim = projection_per_modality * modal_count
-        self.projection_half = self.projection_dim // 2
+        self.projection_half = self.projection_dim // modal_count
         self.projection_quarter = self.projection_dim // 4
         self.dropPathRate = np.linspace(0, dropout_rate * 10, len(convKernels)) * 0.1
         self.transformer_units = [
@@ -91,11 +91,8 @@ class TransformerModel(nn.Module):
 
 
 
-            """
-                Since I am not using the liteformer as the third branch I will have each attention branch be half of the projection dimension
-                because it is half accel and half gyro so each transformer branch will take 100% of each modality
-            """
-            projection_attention_position = (0, self.projection_half)
+
+            projection_attention_position = (0, int(self.projection_dim/modal_count))
             for modal in range(modal_count):
                 attention_name = f"layer_{layerIndex}_modal{modal}_attention"
                 if modal == modal_count - 1:
@@ -183,7 +180,7 @@ class TransformerModel(nn.Module):
         # return logits
 
 class TransformerClassificationModel(nn.Module):
-    def __init__(self,input_shape , activity_count: int,  modal_count=2, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+    def __init__(self,input_shape , activity_count: int,  modal_count=1, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(TransformerClassificationModel,self).__init__()
         self.transformer_core = TransformerModel(input_shape, modal_count, projection_per_modality, patchSize, timeStep, num_heads, filterAttentionHead, convKernels, mlp_head_units, dropout_rate, useTokens)
         self.logits = nn.Linear(mlp_head_units[-1], activity_count)
@@ -270,22 +267,7 @@ class SensorPatches(nn.Module):
         for modal in range(num_modal):
             self.projectors.append(nn.Conv1d(in_channels=3, out_channels=int(projection_dim/num_modal), kernel_size=patchSize, stride=timeStep))
 
-        # self.modal1_project = nn.Conv1d(in_channels=3, out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep)
-        #
-        # self.modal2_project = nn.Conv1d(in_channels=3,out_channels=int(projection_dim/2), kernel_size=patchSize, stride=timeStep)
-
     def forward(self, inp):
-        # output from hart, they do not batch the data
-        # accProjections: (None, 128, 3)
-        # gyro: Tensor("model/sensor_patches/strided_slice_3:0", shape=(None, 128, 3), dtype=float32)
-
-        # print('input to patches ', inp.shape)
-        # in_acc = self.flatten(in_acc) # if the data is not 1D then may need to flatten
-        # in_gyro = self.flatten(in_gyro)
-        # inp = inp.unsqueeze(0)
-
-
-
         projection_position = (0, 3) #we are assuming only trimodal inputs
         patch_outputs = []
         for projectors in self.projectors:
@@ -298,23 +280,6 @@ class SensorPatches(nn.Module):
         concat_proj = torch.cat(patch_outputs, dim=1)
         full_proj = concat_proj.permute(0,2,1)
         return full_proj
-
-        # acc_data = inp[:,:,:3]
-        # gyro_dat = inp[:,:,3:]
-        #
-        # acc_data = acc_data.permute(0,2,1)
-        # gyro_dat = gyro_dat.permute(0,2,1)
-        #
-        # acc = self.modal1_project(acc_data) # pass in the first element of the input corresponding to the accelerometer up to 3
-        # # print('output of patches 1', acc.shape)
-        # gyro = self.modal2_project(gyro_dat)# pass in the last 3 channels corresponding to gyro from 3
-        # # print('output of patches 2', gyro.shape)
-        # projected = torch.cat((acc,gyro),dim=1) #combine the two modalities
-        # # print('output of patches ', projected.shape)
-        # projected = projected.permute(0,2,1)
-        #
-        #
-        # return projected
 
 class PatchEncoder(nn.Module):
     def __init__(self, num_patches:int, projection_dim, **kwargs):
@@ -432,4 +397,8 @@ class MLPHead(nn.Module):
             # print(f"Output shape after {layer.__class__.__name__}:", x.shape)
         # print('output of the final mlp head layer ', x.shape)
         return x
+
+class MultiModalTransformer(nn.Module):
+    def __init__(self, input_shape, activity_count:int, modals:int, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+        super(MultiModalTransformer, self).__init__()
 

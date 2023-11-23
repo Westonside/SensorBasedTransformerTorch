@@ -1,4 +1,6 @@
 # This is a sample Python script.
+import gc
+
 import numpy as np
 import torch.nn.functional
 
@@ -10,7 +12,7 @@ from sklearn.utils import class_weight
 from training.pretext_tasks import match_configuration, Classification_Task
 from utils import configuration_utils
 from preprocess.dataset_loading import load_datasets
-from utils.configuration_utils import match_config_modal, modals
+from utils.configuration_utils import match_config_key, modals
 
 
 # Press ⌃R to execute it or replace it with your code.
@@ -85,37 +87,23 @@ def main(configuration_file: str):
     # print(model)
     training_tasks = []
 
-    dataset = load_datasets(["MotionSense"], path="./datasets/processed")
-
-
-    # task = Classification_Task(dataset, save_path="./", previous_task_path=None, epochs=80, early_stop=False)
+    # dataset = load_datasets(["MotionSense"], path="./datasets/processed")
+    #
+    #
+    # task = Classification_Task(dataset, save_path="./", previous_task_path=None, epochs=80, early_stop=False,modalities=['accelerometer'])
     # task.train()
 
     for configuration in config['configurations']:
         # for training_tasks in  training_tasks:
         print(configuration)
-        dataset = load_datasets(["MotionSense"], path="./datasets/processed")
+        dataset = load_datasets(match_config_key(configuration, "load_files"), path="./datasets/processed")
 
-        task = match_configuration(configuration, 'type')
-        modal = match_config_modal(configuration, 'modalities')
-        if modal is not None:
-            modal_range = modals[modal]
-            task = task(dataset, modal_range)
-            task.train()
-
-        # for epoch in range(1, local_epoch + 1): #TODO: implement early stopping
-        #     # zero the gradients
-        #     optimizer.zero_grad()
-        #     train_epoch(model, epoch, central_train_data, central_train_label, optimizer, torch.nn.functional.cross_entropy)
+        task = match_configuration(configuration, 'type')(dataset, **configuration)
+        task.train()
 
 
-
-
-
-
-
-
-
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 

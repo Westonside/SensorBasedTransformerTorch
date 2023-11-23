@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 
 from UserDataLoader import UserDataLoader
 from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel
+from utils.configuration_utils import modals
 from utils.model_utils import train_epoch, MultiTaskLoss, SingleClassificationFormatter, BinaryClassificationFormatter
 from utils.transformation_utils import transform_funcs_vectorized, transform_funcs_names
 
@@ -21,12 +22,18 @@ def pretext_one():
 
 class Training_Task:
     # this will either load the model or create the model
-    def __init__(self, dataset, save_path="./", previous_task_path=None, epochs=80, early_stop=False):
+    def __init__(self, dataset, modalities, save_path="./", previous_task_path=None, epochs=80, early_stop=False):
         self.model = None
         self.dataset = dataset
         self.save_path = save_path
         self.epochs = epochs
         self.model = None
+        self.num_modal = len(modalities) if isinstance(modalities, list) else 1
+        modals_names = " ".join(modalities) if isinstance(modalities, list) else modalities
+        self.modal_range = modals[modals_names]
+        self.dataset = dataset
+        self.sequence_length = dataset.train.shape[1]
+        self.models_path = "./models"
         if previous_task_path is None:
             self.create_model()
         else:
@@ -46,10 +53,11 @@ class Training_Task:
         pass
 
     def save_model(self):
-        torch.save(self.model, os.path.join(self.save_path, self.get_save_file_name()))
+        os.makedirs('./models', exist_ok=True) # make a new directory if it does not exist
+        torch.save(self.model, os.path.join(self.models_path, os.path.join(self.save_path, self.get_save_file_name()))) # save the model
 
     def train_task_setup(self):
-        pass
+        self.dataset.keep_modalities(self.modal_range)
 
 
 
@@ -79,19 +87,18 @@ class Training_Task:
 
 
 class Classification_Task(Training_Task):
-    TASK_NAME = "Classification_Task"
-    def __init__(self, dataset: UserDataLoader, save_path="./", previous_task_path=None, epochs=80, early_stop=False):
-        super().__init__(dataset, save_path=save_path, previous_task_path=previous_task_path, epochs=epochs)
+    TASK_NAME = "classification_task"
+    def __init__(self, dataset: UserDataLoader, modalities=["accelerometer"], save_path="./", previous_task_path=None, epochs=80, early_stop=False, **kwargs):
+        super().__init__(dataset, save_path=save_path, modalities=modalities, previous_task_path=previous_task_path, epochs=epochs)
         self.dataset = dataset
         self.model = None
         self.create_model()
 
     def create_model(self):
-        self.model = TransformerClassificationModel((128,6), 13, modal_count=2)
+        self.model = TransformerClassificationModel((self.sequence_length,len(self.modal_range)), 13, self.num_modal)
 
     def train_task_setup(self):
-        pass
-
+        super().train_task_setup()
 
     def get_training_data(self):
         return self.dataset.train, self.dataset.train_label
@@ -105,11 +112,9 @@ class Classification_Task(Training_Task):
 
 
 class Transformation_Classification_Task(Training_Task):
-    TASK_NAME = "Transformation_Classification_Task"
-    def __init__(self, dataset: UserDataLoader, modal_range: range, save_path="./", previous_task_path=None, epochs=80, early_stop=False):
-        super().__init__(dataset, save_path=save_path, previous_task_path=previous_task_path, epochs=epochs)
-        self.modal_range = modal_range
-        self.dataset = dataset
+    TASK_NAME = "transformation_classification_task"
+    def __init__(self, dataset: UserDataLoader, epochs=80, modalities=["accelerometer"],  **kwargs):
+        super().__init__(dataset, save_path=kwargs.get("save_path"), modalities=modalities, previous_task_path=kwargs.get("previous_model"), epochs=epochs)
         self.model = None
         self.transformations = transform_funcs_vectorized
         self.create_model()
@@ -117,13 +122,13 @@ class Transformation_Classification_Task(Training_Task):
 
     def train_task_setup(self):
         # this will set up the trainin
-        self.dataset.keep_modalities(self.modal_range)  # keep the modalities
+        super().train_task_setup()
         self.dataset.transform_sets(self.transformations)  # transform the data
 
     def create_model(self):
         #TODO: ALLLOW PASSING IN OTHER  transformations
         #TODO: remove the magic number
-        self.model = TransformerMultiTaskBinaryClassificationModel((128,3), len(transform_funcs_vectorized))
+        self.model = TransformerMultiTaskBinaryClassificationModel((self.sequence_length,3), len(transform_funcs_vectorized))
 
 
     def get_training_data(self):
@@ -146,9 +151,29 @@ def match_configuration(config, key):
     if PRETEXT_TASKS.get(config) is not None:
         return PRETEXT_TASKS.get(config)
     else:
-        print("Not found!")
+        print("Not found!", key)
         return None
 
+
+
+class Multi_Modal_Clustering_Task(Training_Task):
+    TASK_NAME = "multi_modal_clustering_task"
+    def __init__(self, dataset: UserDataLoader,  epochs=80, **kwargs):
+        super().__init__(dataset, save_path=kwargs.get("save_path"), previous_task_path=kwargs.get("previous_model"), epochs=epochs)
+        self.dataset = dataset
+    def create_model(self):
+        self.model = None
+        pass
+
+    def train_task_setup(self):
+        super().train_task_setup()
+
+
+
+
+
 PRETEXT_TASKS = {
-    "transformation_classification": Transformation_Classification_Task
+    Transformation_Classification_Task.TASK_NAME: Transformation_Classification_Task,
+    Multi_Modal_Clustering_Task.TASK_NAME: Multi_Modal_Clustering_Task,
+    Classification_Task.TASK_NAME: Classification_Task
 }

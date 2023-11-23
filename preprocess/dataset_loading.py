@@ -48,7 +48,9 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
         if dataset == "MotionSense": #this converts the label to the correct label
             central_train_label_align.append([Motion_Sense[labelIndex] for labelIndex in training_labels[i]])
             central_test_label_align.append([Motion_Sense[label_index] for label_index in testing_labels[i]])
-
+        elif (dataset == 'HHAR'):
+            central_train_label_align.append(np.hstack([HHAR[labelIndex] for labelIndex in training_labels[i]]))
+            central_test_label_align.append(np.hstack([HHAR[labelIndex] for labelIndex in training_labels[i]]))
 
     training_data = np.vstack(training_data)
     training_labels = np.hstack(central_train_label_align)
@@ -132,15 +134,15 @@ def load_hhar(path):
     client_data, client_labels = load_clients_data(path, dataset_classes_users_map["HHAR"][1])
     orientations = hkl.load([os.path.join(path,file) for file in os.listdir(path) if "device" in file.lower()][0])
     orientationsNames = ['nexus4', 'lgwatch', 's3', 's3mini', 'gear', 'samsungold']
-    train, test, orientation = load_data(client_data, client_labels)
-    client_orientation_train, client_orientation_test = orientation
-    for i in range(dataset_classes_users_map["HHAR"][1]): # for all clients
-        client_orientation_train[i] = orientations[orientationsNames[i]][client_orientation_train[i]]
-        client_orientation_test[i] = orientations[orientationsNames[i]][client_orientation_test[i]]
+    train, test, orientation = load_data(client_data, client_labels, 0.1, 0.1)
+
+    # for i in range(dataset_classes_users_map["HHAR"][1]): # for all clients
+    #     client_orientation_train[i] = orientations[orientationsNames[i]][client_orientation_train[i]]
+    #     client_orientation_test[i] = orientations[orientationsNames[i]][client_orientation_test[i]]
 
 
     train_data,train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
-    return (train_data, train_labels), (test_data, test_labels), (client_orientation_train, client_orientation_test)
+    return (train_data, train_labels), (test_data, test_labels), ()
 
 
 

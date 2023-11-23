@@ -1,14 +1,23 @@
 {
   "configurations": [
     {
-      "type": "transformation_classification",
-      "load_files": ["MotionSense"],
+      "type": "transformation_classification_task",
+      "load_files": [ "MotionSense"],
       "modalities": "accelerometer",
       "epochs": 80,
-      "early_stopping": true
+      "early_stopping": true,
+      "save_path": "models/accelerometer_extract"
     },
     {
-      "type": "multi_modal_clustering",
+      "type": "transformation_classification_task",
+      "load_files": [ "MotionSense"],
+      "modalities": "gyroscope",
+      "epochs": 80,
+      "early_stopping": true,
+      "save_path": "models/gyroscope_extract"
+    },
+    {
+      "type": "multi_modal_clustering_task",
       "modalities": ["accelerometer", "gyroscope"],
       "load_files": ["MotionSense"],
       "epochs": 80
