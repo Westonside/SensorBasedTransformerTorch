@@ -76,7 +76,7 @@ class SingleClassificationFormatter(OutputFormatter):
             epoch, self.correct / self.total), loss if loss is not None else "")
 
 
-def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=32):
+def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=32, device="cuda"):
     # print("Training")
     train_loss = 0.
     train_acc = 0.

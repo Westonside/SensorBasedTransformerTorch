@@ -77,7 +77,7 @@ class Training_Task:
         training, training_label = self.get_training_data()
         for epoch in range(1, self.epochs + 1):
             train_epoch(self.model, epoch, training, training_label, output_formatter=self.get_output_formatter(),
-                        optimizer=optimizer, loss_fn=self.get_loss())
+                        optimizer=optimizer, loss_fn=self.get_loss(), device=device)
             # self.save_model()
         self.save_model()
 
