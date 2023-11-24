@@ -399,6 +399,33 @@ class MLPHead(nn.Module):
         return x
 
 class MultiModalTransformer(nn.Module):
-    def __init__(self, input_shape, activity_count:int, modals:int, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+    def __init__(self, input_shape, activity_count:int, modals:int, embed_dim:int, projection_dim: int, reconstruction_size=768, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(MultiModalTransformer, self).__init__()
+        self.feature_extractors = ModuleList()
+        self.classification_heads = ModuleList()
+        in_dim = embed_dim
+        self.reconstruction_heads = ModuleList()
+        for _ in range(activity_count): #adding the proejctors and the classification heads
+            self.feature_extractors.append(TransformerModel(input_shape, modals, projection_dim, patchSize, timeStep, num_heads, filterAttentionHead, convKernels, mlp_head_units, dropout_rate, useTokens)) # you may want the model to output 1024 and then max pool to 1024 for modalities
+            self.classification_heads.append(nn.Linear(embed_dim,projection_dim, bias=False))
+            self.reconstruction_heads.append(nn.Sequential(
+                nn.Linear(embed_dim, reconstruction_size),
+                nn.ReLU(inplace=True),
+                nn.Linear(reconstruction_size, 1024),
+            ))
+        self.mse = nn.MSELoss(reduction='none')
+
+    def forward(self, data):
+        # first you will extract the features
+        extracted_features = []
+        for feature_extractor in self.feature_extractors():
+            feature_extractor(data)
+
+        if not self.training:
+            # Mean-pool audio embeddings and disregard embeddings from input 0 padding
+            #IDK skip?
+            pass
+
+
+
 

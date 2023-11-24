@@ -159,6 +159,7 @@ def match_configuration(config, key):
 class Multi_Modal_Clustering_Task(Training_Task):
     TASK_NAME = "multi_modal_clustering_task"
     def __init__(self, dataset: UserDataLoader,  epochs=80, **kwargs):
+        # use the silhouette score in kmeans
         super().__init__(dataset, save_path=kwargs.get("save_path"), previous_task_path=kwargs.get("previous_model"), epochs=epochs)
         self.dataset = dataset
     def create_model(self):
@@ -167,6 +168,16 @@ class Multi_Modal_Clustering_Task(Training_Task):
 
     def train_task_setup(self):
         super().train_task_setup()
+
+    def train(self):
+        # you will first attempt to reconstruct the input
+        for epoch in range(1, self.epochs + 1):
+            pass
+
+
+
+    def train_one_epoch(self, model, opt, data, loss_fn, scheduler):
+        pass
 
 
 
