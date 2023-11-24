@@ -90,8 +90,8 @@ def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, outpu
         indices = permutation[i:i + batch_size]
         batch_x, batch_y = train_data[indices], torch.from_numpy(train_label[indices]) if type(train_label) is not dict else convert_multitask_dict(train_label, indices)
         # batch_x = torch.from_numpy(batch_x).float()
-        batch_x = torch.from_numpy(batch_x).float().cuda()
-        batch_y = (batch_y).float().cuda()
+        batch_x = torch.from_numpy(batch_x).float().to(device)
+        batch_y = (batch_y).float().to(device)
         # batch_y = (batch_y).float()
         outputs = model(batch_x)
         # pred = torch.argmax(outputs, dim=1)
