@@ -6,15 +6,13 @@ class MultiTaskLoss(nn.Module):
     def __init__(self, num_tasks: int):
         super(MultiTaskLoss, self).__init__()
         # self.loss = nn.BCELoss()
-        self.losses = [nn.BCEWithLogitsLoss() for _ in range(num_tasks)]
-        self.class_accuracy = [0 for _ in range(num_tasks)]
+        self.losses = nn.BCELoss()
         self.total = 0
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor):
         loss = 0
-        for i in range(pred.shape[1]):
-            loss += self.losses[i](pred[:, i], target[:, i])
-
+        for transform_index, transform in enumerate(pred):
+            loss += self.losses(transform, target[transform_index])
         return loss
 
 
@@ -39,14 +37,13 @@ class BinaryClassificationFormatter(OutputFormatter):
 
     def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch, loss=None):
         predictions = (pred > 0.5).float()
-        for transform in range(self.tasks_count):
-            correct, total = self.class_accuracy[transform]
-            total += target.shape[0]
-            correct += torch.count_nonzero(predictions[:, transform] == target[:, transform]).item()
-            self.class_accuracy[transform] = (correct, total)
-        if self.verbose:
-            self.print_accuracy(epoch, loss=loss)
+        for i in range(self.tasks_count):
+            correct, total = self.class_accuracy[i]
+            correct += torch.count_nonzero(predictions[i] == target[i]).item()
+            total += target[i].shape[0]
+            self.class_accuracy[i] = (correct, total)
 
+        self.print_accuracy(epoch, loss=loss)
     def print_accuracy(self, epoch: int, batch=None, loss=None):
         print('Train Epoch: {} | Acc: {} | total loss: {}'.format(
                 epoch, self.format_accuracy(), loss if loss is not None else ""))
@@ -88,7 +85,7 @@ def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, outpu
     for i in range(0, train_data.shape[0], batch_size):
         optimizer.zero_grad()
         indices = permutation[i:i + batch_size]
-        batch_x, batch_y = train_data[indices], torch.from_numpy(train_label[indices]) if type(train_label) is not dict else convert_multitask_dict(train_label, indices)
+        batch_x, batch_y = train_data[indices], torch.from_numpy(train_label[indices]) if type(train_label) is not dict else torch.stack([torch.from_numpy(train_label[key][indices]) for key in train_label.keys()])
         # batch_x = torch.from_numpy(batch_x).float()
         batch_x = torch.from_numpy(batch_x).float().to(device)
         batch_y = (batch_y).float().to(device)

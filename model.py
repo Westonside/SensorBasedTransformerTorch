@@ -212,10 +212,10 @@ class TransformerMultiTaskBinaryClassificationModel(nn.Module):
 
     def forward(self, x):
         x = self.transformer_core(x)
-        outputs = []
-        for head in self.classification_heads:
-            outputs.append(head(x))
-        return torch.dstack(outputs).squeeze()
+        outputs = [head(x).squeeze() for head in self.classification_heads]
+        return torch.stack(outputs)
+        # return torch.dstack(outputs).squeeze()
+        # return torch.stac
 
 
 
