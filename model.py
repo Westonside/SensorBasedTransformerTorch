@@ -9,6 +9,8 @@ from torch.nn import ModuleList
     This will take a code from the end of the module and then it will take the module itself
     it will also take a dict object that contain the ouputs of branches 
 """
+
+global_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def process_module(code , module, branch_outputs: dict):
     skip_connection = 'skip_connection'
     # print(code)
@@ -188,7 +190,7 @@ class TransformerClassificationModel(nn.Module):
     def forward(self, x):
         x = self.transformer_core(x)
         logits = self.logits(x)
-        # put the logits through the softmax
+        # put the logits through the softmax to get the probability distributuion
         logits = self.softmax(logits)
         return logits
 
@@ -289,8 +291,8 @@ class PatchEncoder(nn.Module):
         self.position_embedding = nn.Embedding(self.num_patches, projection_dim)
 
     def forward(self, input_patch: Tensor) -> Tensor:
-        positions = torch.arange(0, self.num_patches, 1) # create a tensor corresponding to position position
-        encoded = self.position_embedding(positions) # get the position embedding
+        positions = torch.arange(0, self.num_patches, 1).to(global_device) # create a tensor corresponding to position position
+        encoded = self.position_embedding(positions).to(global_device) # get the position embedding
         # encoded = input_patch +  encoded # add the position embedding to the input patch
         # input_patch = input_patch.permute(0,2,1)
         encoded = input_patch + encoded

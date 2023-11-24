@@ -5,14 +5,15 @@ from torch import nn
 class MultiTaskLoss(nn.Module):
     def __init__(self, num_tasks: int):
         super(MultiTaskLoss, self).__init__()
-        # self.loss = nn.BCELoss()
-        self.losses = nn.BCELoss()
+        self.loss = nn.BCELoss()
+        # self.losses = [nn.BCELoss() for _ in range(num_tasks)]
+        self.class_accuracy = [0 for _ in range(num_tasks)]
         self.total = 0
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor):
         loss = 0
         for transform_index, transform in enumerate(pred):
-            loss += self.losses(transform, target[transform_index])
+            loss += self.loss(transform, target[transform_index])
         return loss
 
 
@@ -73,7 +74,7 @@ class SingleClassificationFormatter(OutputFormatter):
             epoch, self.correct / self.total), loss if loss is not None else "")
 
 
-def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=32, device="cuda"):
+def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=64, device="cuda"):
     # print("Training")
     train_loss = 0.
     train_acc = 0.
