@@ -12,9 +12,10 @@ from torch.utils.data import DataLoader
 from UserDataLoader import UserDataLoader
 from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel
 from utils.configuration_utils import modals
-from utils.model_utils import train_epoch, MultiTaskLoss, SingleClassificationFormatter, BinaryClassificationFormatter
+from utils.model_utils import train_epoch, MultiTaskLoss, SingleClassificationFormatter, BinaryClassificationFormatter, \
+    MMS_loss
 from utils.transformation_utils import transform_funcs_vectorized, transform_funcs_names
-
+from fast_pytorch_kmeans import KMeans
 
 def pretext_one():
     print('pretext one')
@@ -171,9 +172,58 @@ class Multi_Modal_Clustering_Task(Training_Task):
 
     def train(self):
         # you will first attempt to reconstruct the input
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+        training, training_label = self.get_training_data()
+        loss_op = MMS_loss()
+        loss_op.to(device)
         for epoch in range(1, self.epochs + 1):
-            pass
+            # now you will train each batch
+            queue_v = None
+            use_the_queue = False
+            centroid = None
+            batch_size = 64
 
+
+            permutation = torch.randperm(training.shape[0])
+
+            for i in range(0, training.shape[0], batch_size):
+                optimizer.zero_grad()
+                # data = data.to(device)
+                data = training[permutation[i:i + batch_size]]
+
+                acc = data[:, :, 0:3].to(device)
+                gyro = data[:, :, 3:6].to(device)
+                with torch.set_grad_enabled(True):
+                    acc_ft, gyro_ft, classified_acc, classified_gyro, recon_loss = self.model(acc,gyro)
+                    recon_weight = 50
+                    recon_loss = torch.mean(recon_loss) * recon_weight
+
+                    acc_out = classified_acc
+                    gyro_out = classified_gyro
+
+                    fused_data = (acc_out + gyro_out) / 2 # joining the extracted features so that they can be clustered
+
+
+                    sim_audio_acc = torch.matmul(acc_ft, gyro_ft.t()) #calculates the ismilarity between the gyro and the acc
+                    sim_audio_gyro = torch.matmul(gyro_ft, acc_ft.t()) # calculates the similarity between the acc and the gyro
+
+                    # calculate the loss
+                    loss = loss_op(sim_audio_gyro) + loss_op(sim_audio_acc)
+                    # kmeans time
+                    queue_v,  out, use_the_queue = update_queue(queue_v, use_the_queue, fused_data)
+                    kmeans = KMeans(n_clusters=256, mode='cosine')
+                    labels = kmeans.fit_predict(out)
+                    centroid = kmeans.centroids
+                    # get the labels for the items in the batch
+                    loss_val = cluster_contrastive(fused_data, centroid, labels[-batch_size:], batch_size)
+                    loss += loss_val * 1 # clustering lambda
+                    loss += recon_loss
+                    loss.backward()
+                    optimizer.step()
+
+                    return loss.item(), queue_v, use_the_queue, centroid
 
 
     def train_one_epoch(self, model, opt, data, loss_fn, scheduler):
@@ -181,7 +231,47 @@ class Multi_Modal_Clustering_Task(Training_Task):
 
 
 
+def cluster_contrastive(fushed,centroid,labels,bs):
+    S = torch.matmul(fushed, centroid.t()) # get the similarity between the fused data and the centroids
 
+    target = torch.zeros(bs, centroid.shape[0]).to(S.device) # create a target tensor
+
+    target[range(target.shape[0]), labels] = 1 # set the target tensor to be 1 where the label is
+
+    S = S - target * (0.001) # subtract the target from the similarity matrix
+
+    I2C_loss = nn.functional.nll_loss(nn.functional.log_softmax(S, dim=1), labels) # calculate the loss
+
+    # else:
+    #     S = S.view(S.shape[0], S.shape[1], -1)
+    #     nominator = S * target[:, :, None]
+    #     nominator = nominator.sum(dim=1)
+    #     nominator = th.logsumexp(nominator, dim=1)
+    #     denominator = S.view(S.shape[0], -1)
+    #     denominator = th.logsumexp(denominator, dim=1)
+    #     I2C_loss = th.mean(denominator - nominator)
+
+    return I2C_loss
+
+
+def update_queue(queue,use_the_queue,fuse):
+    bs = int(4096/2)
+    fuse2 = fuse.detach()
+    fuse2 = fuse2.view(-1, 32, fuse2.shape[-1])
+    fuse2 = fuse2[:,:16,:]
+    fuse2 = fuse2.reshape(-1, fuse2.shape[-1])
+    out = fuse.detach()
+    if queue is not None:  # no queue in first round
+        if use_the_queue or not torch.all(queue[ -1, :] == 0):  # queue[2,3840,128] if never use the queue or the queue is not full
+            use_the_queue = True
+            # print('use queue')
+            out = torch.cat((queue,fuse.detach()))  # queue [1920*128] w_t [128*3000] = 1920*3000 out [32*3000] 1952*3000
+
+            #print('out size',out.shape)
+        # fill the queue
+        queue[ bs:] = queue[ :-bs].clone()  # move 0-6 to 1-7 place
+        queue[:bs] = fuse2
+    return queue,out,use_the_queue
 
 PRETEXT_TASKS = {
     Transformation_Classification_Task.TASK_NAME: Transformation_Classification_Task,

@@ -3,6 +3,8 @@ import os
 import torch
 from torch import nn
 
+from model import TransformerModel
+
 
 class MultiTaskLoss(nn.Module):
     def __init__(self, num_tasks: int):
@@ -126,8 +128,9 @@ def convert_multitask_dict(labels, indicies):
 
 
 def load_pretrained(path):
-    model = torch.jit.load(path)
-    model.eval()
+    model = TransformerModel((128,3), 1)
+    model.load_state_dict(torch.load(path))
+    return model
 
 def save_model(model, folder, name): #TODO: Add model.extract_core to the model
     model = model.extract_core()
@@ -141,3 +144,20 @@ def freeze_model(model):
     for param in model.parameters():
         param.requires_grad = False
     return model
+
+
+
+
+class MMS_loss(nn.Module):
+    def __init__(self):
+        super(MMS_loss, self).__init__()
+
+    def forward(self, S, margin=0.001):
+        deltas = margin * torch.eye(S.size(0)).to(S.device)
+        S = S - deltas
+
+        target = torch.LongTensor(list(range(S.size(0)))).to(S.device)
+        I2C_loss = nn.functional.nll_loss(nn.functional.log_softmax(S, dim=1), target)
+        C2I_loss = nn.functional.nll_loss(nn.functional.log_softmax(S.t(), dim=1), target)
+        loss = I2C_loss + C2I_loss
+        return loss
