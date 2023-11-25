@@ -20,7 +20,8 @@
       "type": "multi_modal_clustering_task",
       "modalities": ["accelerometer", "gyroscope"],
       "load_files": ["MotionSense"],
-      "epochs": 80
+      "epochs": 80,
+      "feature_extractor_paths": ["models/accelerometer_extract", "models/gyroscope_extract"]
     }
   ]
 }

@@ -1,3 +1,5 @@
+import os
+
 import torch
 from torch import nn
 
@@ -120,3 +122,22 @@ def convert_multitask_dict(labels, indicies):
         outputs[i][value] = 1
 
     return outputs
+
+
+
+def load_pretrained(path):
+    model = torch.jit.load(path)
+    model.eval()
+
+def save_model(model, folder, name): #TODO: Add model.extract_core to the model
+    model = model.extract_core()
+    model = freeze_model(model)  # freeze the model
+    os.makedirs(folder, exist_ok=True)
+    torch.jit.script(model)
+    torch.jit.save(model, os.path.join(folder, name))
+
+
+def freeze_model(model):
+    for param in model.parameters():
+        param.requires_grad = False
+    return model

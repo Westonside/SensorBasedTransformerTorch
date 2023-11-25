@@ -5,6 +5,8 @@ import torch
 from torch import nn, Tensor
 from torch.nn import ModuleList
 
+from utils.model_utils import load_pretrained
+
 """
     This will take a code from the end of the module and then it will take the module itself
     it will also take a dict object that contain the ouputs of branches 
@@ -194,6 +196,9 @@ class TransformerClassificationModel(nn.Module):
         logits = self.softmax(logits)
         return logits
 
+    def extract_core(self, x):
+        return self.transformer_core(x)
+
 class TransformerMultiTaskBinaryClassificationModel(nn.Module):
     def __init__(self, input_shape, classification_heads:int, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(TransformerMultiTaskBinaryClassificationModel, self).__init__()
@@ -219,8 +224,8 @@ class TransformerMultiTaskBinaryClassificationModel(nn.Module):
         # return torch.dstack(outputs).squeeze()
         # return torch.stac
 
-
-
+    def extract_core(self, x):
+        return self.transformer_core(x)
 
 class SensorPatches(nn.Module):
     def __init__(self,projection_dim,patchSize,timeStep, num_modal=2):
@@ -401,33 +406,75 @@ class MLPHead(nn.Module):
         return x
 
 class MultiModalTransformer(nn.Module):
-    def __init__(self, input_shape, activity_count:int, modals:int, embed_dim:int, projection_dim: int, reconstruction_size=768, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+    def __init__(self, input_shape, activity_count:int, modals:int, cluster_size: int, embed_dim:int, projection_dim: int, reconstruction_size=768, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(MultiModalTransformer, self).__init__()
+        # first we need to get our feature extractors which will be our trained transformer models
         self.feature_extractors = ModuleList()
-        self.classification_heads = ModuleList()
-        in_dim = embed_dim
-        self.reconstruction_heads = ModuleList()
-        for _ in range(activity_count): #adding the proejctors and the classification heads
-            self.feature_extractors.append(TransformerModel(input_shape, modals, projection_dim, patchSize, timeStep, num_heads, filterAttentionHead, convKernels, mlp_head_units, dropout_rate, useTokens)) # you may want the model to output 1024 and then max pool to 1024 for modalities
-            self.classification_heads.append(nn.Linear(embed_dim,projection_dim, bias=False))
-            self.reconstruction_heads.append(nn.Sequential(
-                nn.Linear(embed_dim, reconstruction_size),
+        self.gating_units = ModuleList()
+        for i in range(modals):
+            self.feature_extractors.append(load_pretrained('testing'))
+        # there is no need for a projection layer because the transformer outputs the same dimensions
+        self.modals = modals
+        # the reconstruction parts
+        self.reconstruction_list = ModuleList()
+
+        self.projection_head = nn.Sequential(
+            nn.Linear(embed_dim, projection_dim),
+            nn.BatchNorm1d(embed_dim//8),
+            nn.ReLU(inplace=True),
+            nn.Linear(projection_dim, cluster_size)
+        )
+        self.classification = nn.Linear(cluster_size, projection_dim, bias=False)
+
+
+        for _ in range(modals):
+            self.reconstruction_list.append(nn.Sequential(
+                nn.Linear(projection_dim, reconstruction_size),
                 nn.ReLU(inplace=True),
-                nn.Linear(reconstruction_size, 1024),
+                nn.Linear(reconstruction_size, input_shape[1]),
+                nn.ReLU(inplace=True)
             ))
-        self.mse = nn.MSELoss(reduction='none')
+
+        self.mse - nn.MSELoss(reduction='none')
 
     def forward(self, data):
-        # first you will extract the features
-        extracted_features = []
-        for feature_extractor in self.feature_extractors():
-            feature_extractor(data)
+        # extract all features
+        features = []
+        position = (0, 3)
+        for i in range(self.modals):
+            features.append(self.feature_extractors[i](data[i]))
+            position = (position[1], position[1]+3)
 
-        if not self.training:
-            # Mean-pool audio embeddings and disregard embeddings from input 0 padding
-            #IDK skip?
-            pass
+        reconstruction_gt = features # the ground truths for the reconstruction for the labels are the features
+        gated_features = [self.gating_units[i](gated) for i, gated in enumerate(features)]
+        reconstructed = [self.reconstruction_list[i](gated) for i, gated in enumerate(gated_features)]
+        # now we will normalize the gated features
+        normalized_features = [nn.functional.normalize(gated, dim=1, p=2) for gated in gated_features]
+        # now we will classify the normalized features
+        classification = [self.classification(gated) for gated in normalized_features]
+
+        # now we will get the mean mse for the reconstructed
+        reconstruction_loss = torch.asarray([torch.mean(self.mse(reconstructed[i], reconstruction_gt[i]), dim=-1) for i in range(self.modals)])
+        return gated_features, classification, torch.sum(reconstruction_loss)
+
+class Gated_Embedding_Unit(nn.Module):
+    def __init__(self, input_dimension, output_dimension):
+        super(Gated_Embedding_Unit, self).__init__()
+        self.fc = nn.Linear(input_dimension, output_dimension) # fully coneccted layer to project to a given dimension
+        self.cg = Context_Gating(output_dimension) # the context gating unit
+
+    def forward(self, x):
+        x = self.fc(x) # pass through the linear layer
+        x = self.cg(x)  # pass through the context gating unit
+        return x
 
 
+class Context_Gating(nn.Module):
+    def __init__(self, dimension):
+        super(Context_Gating, self).__init__()
+        self.fc = nn.Linear(dimension, dimension)
 
-
+    def forward(self, x):
+        x1 = self.fc(x)
+        x = torch.cat((x, x1), 1) # combine the input before projection with the projected input
+        return nn.functional.glu(x, 1) # gated linear unit
