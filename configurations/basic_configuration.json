@@ -1,12 +1,13 @@
 {
   "configurations": [
-    {
+  {
       "type": "transformation_classification_task",
       "load_files": [ "MotionSense"],
       "modalities": "accelerometer",
       "epochs": 80,
       "early_stopping": true,
-      "save_path": "models/accelerometer_extract"
+      "save_dir": "models",
+      "save_file": "accelerometer_extract.pt"
     },
     {
       "type": "transformation_classification_task",
@@ -14,7 +15,8 @@
       "modalities": "gyroscope",
       "epochs": 80,
       "early_stopping": true,
-      "save_path": "models/gyroscope_extract"
+      "save_dir": "models",
+      "save_file": "gyroscope_extract.pt"
     },
     {
       "type": "multi_modal_clustering_task",

@@ -23,10 +23,11 @@ def pretext_one():
 
 class Training_Task:
     # this will either load the model or create the model
-    def __init__(self, dataset, modalities, save_path="./", previous_task_path=None, epochs=80, early_stop=False):
+    def __init__(self, dataset, modalities, save_dir: str, save_file: str,  epochs=80, early_stop=False):
         self.model = None
         self.dataset = dataset
-        self.save_path = save_path
+        self.dir = save_dir
+        self.save_file = save_file
         self.epochs = epochs
         self.model = None
         self.num_modal = len(modalities) if isinstance(modalities, list) else 1
@@ -35,10 +36,11 @@ class Training_Task:
         self.dataset = dataset
         self.sequence_length = dataset.train.shape[1]
         self.models_path = "./models"
-        if previous_task_path is None:
-            self.create_model()
-        else:
-            self.load_model(previous_task_path)
+        self.create_model()
+        # if previous_task_path is None:
+        #     self.create_model()
+        # else:
+        #     self.load_model(previous_task_path)
         pass
 
     def create_model(self):
@@ -48,14 +50,14 @@ class Training_Task:
         return self.model
 
     def load_model(self, configuration_path):
-        self.model = torch.load(configuration_path)
+       pass
 
     def get_save_file_name(self) -> str:
         pass
 
     def save_model(self):
-        os.makedirs('./models', exist_ok=True) # make a new directory if it does not exist
-        torch.save(self.model, os.path.join(self.models_path, os.path.join(self.save_path, self.get_save_file_name()))) # save the model
+        os.makedirs(self.dir, exist_ok=True) # make a new directory if it does not exist
+        torch.save(self.model.state_dict(), os.path.join(self.dir,self.save_file)) # save the model
 
     def train_task_setup(self):
         self.dataset.keep_modalities(self.modal_range)
@@ -89,8 +91,8 @@ class Training_Task:
 
 class Classification_Task(Training_Task):
     TASK_NAME = "classification_task"
-    def __init__(self, dataset: UserDataLoader, modalities=["accelerometer"], save_path="./", previous_task_path=None, epochs=80, early_stop=False, **kwargs):
-        super().__init__(dataset, save_path=save_path, modalities=modalities, previous_task_path=previous_task_path, epochs=epochs)
+    def __init__(self, dataset: UserDataLoader, modalities=["accelerometer"],  epochs=80, early_stop=False, **kwargs):
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities, epochs=epochs)
         self.dataset = dataset
         self.model = None
         self.create_model()
@@ -115,7 +117,7 @@ class Classification_Task(Training_Task):
 class Transformation_Classification_Task(Training_Task):
     TASK_NAME = "transformation_classification_task"
     def __init__(self, dataset: UserDataLoader, epochs=80, modalities=["accelerometer"],  **kwargs):
-        super().__init__(dataset, save_path=kwargs.get("save_path"), modalities=modalities, previous_task_path=kwargs.get("previous_model"), epochs=epochs)
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs)
         self.model = None
         self.transformations = transform_funcs_vectorized
         self.create_model()
@@ -161,7 +163,7 @@ class Multi_Modal_Clustering_Task(Training_Task):
     TASK_NAME = "multi_modal_clustering_task"
     def __init__(self, dataset: UserDataLoader,  epochs=80, **kwargs):
         # use the silhouette score in kmeans
-        super().__init__(dataset, save_path=kwargs.get("save_path"), previous_task_path=kwargs.get("previous_model"), epochs=epochs)
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs)
         self.dataset = dataset
     def create_model(self):
         self.model = None
