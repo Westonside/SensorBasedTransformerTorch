@@ -411,8 +411,8 @@ class MultiModalTransformer(nn.Module):
         # first we need to get our feature extractors which will be our trained transformer models
         self.feature_extractors = ModuleList()
         self.gating_units = ModuleList()
-        for i in range(modals):
-            self.feature_extractors.append(load_pretrained('testing'))
+        self.acc_ft_ext = load_pretrained("accelerometer_extract.pt")
+        self.gyro_ft_ext = load_pretrained("gyroscope_extract.pt")
         # there is no need for a projection layer because the transformer outputs the same dimensions
         self.modals = modals
         # the reconstruction parts
@@ -437,25 +437,42 @@ class MultiModalTransformer(nn.Module):
 
         self.mse - nn.MSELoss(reduction='none')
 
-    def forward(self, data):
+    def forward(self, acc, gyro, mag=None):
         # extract all features
-        features = []
-        position = (0, 3)
-        for i in range(self.modals):
-            features.append(self.feature_extractors[i](data[i]))
-            position = (position[1], position[1]+3)
+        acc_features = self.acc_ft_ext(acc)
+        gyro_features = self.gyro_ft_ext(gyro)
 
-        reconstruction_gt = features # the ground truths for the reconstruction for the labels are the features
-        gated_features = [self.gating_units[i](gated) for i, gated in enumerate(features)]
-        reconstructed = [self.reconstruction_list[i](gated) for i, gated in enumerate(gated_features)]
+        acc_reconstruction_gt = acc_features
+        gyro_reconstruction_gt = gyro_features
+
+        # now we will pass the features through the gating untis
+        acc_gated_features = self.gating_units[0](acc_features)
+        gyro_gated_features = self.gating_units[1](gyro_features)
         # now we will normalize the gated features
-        normalized_features = [nn.functional.normalize(gated, dim=1, p=2) for gated in gated_features]
-        # now we will classify the normalized features
-        classification = [self.classification(gated) for gated in normalized_features]
+        reconstruct_acc = self.reconstruction_list[0](acc_gated_features)
+        reconstruct_gyro = self.reconstruction_list[1](gyro_gated_features)
 
-        # now we will get the mean mse for the reconstructed
-        reconstruction_loss = torch.asarray([torch.mean(self.mse(reconstructed[i], reconstruction_gt[i]), dim=-1) for i in range(self.modals)])
-        return gated_features, classification, torch.sum(reconstruction_loss)
+        # now we will normalize the gated features
+        normalized_acc = nn.functional.normalize(acc_gated_features, dim=1, p=2)
+        normalized_gyro = nn.functional.normalize(gyro_gated_features, dim=1, p=2)
+        # now we will classify the normalized features
+        classification_acc = self.classification(normalized_acc)
+        classification_gyro = self.classification(normalized_gyro)
+
+        recon_loss_acc = torch.mean(self.mse(reconstruct_acc, acc_reconstruction_gt), dim=-1)
+        recon_loss_gyro = torch.mean(self.mse(reconstruct_gyro, gyro_reconstruction_gt), dim=-1)
+        return acc_gated_features, gyro_features, classification_acc, classification_gyro, recon_loss_acc + recon_loss_gyro
+        reconstruction_gt = features # the ground truths for the reconstruction for the labels are the features
+        # gated_features = [self.gating_units[i](gated) for i, gated in enumerate(features)]
+        # reconstructed = [self.reconstruction_list[i](gated) for i, gated in enumerate(gated_features)]
+        # # now we will normalize the gated features
+        # normalized_features = [nn.functional.normalize(gated, dim=1, p=2) for gated in gated_features]
+        # # now we will classify the normalized features
+        # classification = [self.classification(gated) for gated in normalized_features]
+        #
+        # # now we will get the mean mse for the reconstructed
+        # reconstruction_loss = torch.asarray([torch.mean(self.mse(reconstructed[i], reconstruction_gt[i]), dim=-1) for i in range(self.modals)])
+        # return gated_features, classification, torch.sum(reconstruction_loss)
 
 class Gated_Embedding_Unit(nn.Module):
     def __init__(self, input_dimension, output_dimension):
