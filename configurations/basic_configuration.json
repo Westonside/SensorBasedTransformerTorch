@@ -2,18 +2,18 @@
   "configurations": [
   {
       "type": "transformation_classification_task",
-      "load_files": [ "MotionSense"],
+      "load_files": [ "RealWorld", "MotionSense", "UCI"],
       "modalities": "accelerometer",
-      "epochs": 80,
+      "epochs": 120,
       "early_stopping": true,
       "save_dir": "models",
       "save_file": "accelerometer_extract.pt"
     },
     {
       "type": "transformation_classification_task",
-      "load_files": [ "MotionSense"],
+      "load_files": [ "RealWorld", "MotionSense", "UCI"],
       "modalities": "gyroscope",
-      "epochs": 80,
+      "epochs": 120,
       "early_stopping": true,
       "save_dir": "models",
       "save_file": "gyroscope_extract.pt"
@@ -21,8 +21,8 @@
     {
       "type": "multi_modal_clustering_task",
       "modalities": ["accelerometer", "gyroscope"],
-      "load_files": ["MotionSense"],
-      "epochs": 80,
+      "load_files": ["RealWorld", "MotionSense", "UCI"],
+      "epochs": 140,
       "feature_extractor_paths": ["models/accelerometer_extract", "models/gyroscope_extract"]
     }
   ]

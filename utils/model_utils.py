@@ -1,9 +1,9 @@
 import os
 
+import numpy as np
 import torch
 from torch import nn
 
-from model import TransformerModel
 
 
 class MultiTaskLoss(nn.Module):
@@ -75,7 +75,7 @@ class SingleClassificationFormatter(OutputFormatter):
 
     def print_accuracy(self, epoch: int, batch=None, loss=None):
         print('Train Epoch: {} | Acc: {:.6f} | total loss: {}'.format(
-            epoch, self.correct / self.total), loss if loss is not None else "")
+            epoch, (self.correct / self.total), loss if loss is not None else ""))
 
 
 def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=64, device="cuda"):
@@ -105,6 +105,46 @@ def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, outpu
 
 
 
+def temp_train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=64, device="cuda"):
+    # print("Training")
+    train_loss = 0.
+    train_acc = 0.
+    correct = 0
+    total = 0
+    model.train()
+
+    permutation = torch.randperm(train_data.shape[0])
+    for i in range(0, train_data.shape[0], batch_size):
+        optimizer.zero_grad()
+        indices = permutation[i:i + batch_size]
+        batch_x, batch_y = train_data[indices], torch.from_numpy(train_label[indices]) if type(
+            train_label) is not dict else torch.stack(
+            [torch.from_numpy(train_label[key][indices]) for key in train_label.keys()])
+        # batch_x = torch.from_numpy(batch_x).float()
+        batch_x = torch.from_numpy(batch_x).float().to(device)
+        batch_y = (batch_y).float().to(device)
+        # batch_y = (batch_y).float()
+        outputs = model(batch_x[:,:,:3], batch_x[:,:,3:])
+        # pred = torch.argmax(outputs, dim=1)
+        loss = loss_fn(outputs, batch_y)
+        train_loss += loss.item()
+        loss.backward()
+        optimizer.step()
+        output_formatter.get_accuracy(outputs, batch_y, epoch, loss)
+
+
+    # scores = np.vstack(scores)
+    # y = arg_max_predict(scores)
+    print('done')
+
+
+
+def arg_max_predict(scores):
+    y_final = np.zeros((scores.shape[0], scores.shape[1]))
+    arg_y = np.argmax(scores, axis=1)
+    for i in range(scores.shape[0]):
+        y_final[i][arg_y[i]] = 1
+    return y_final
 
 
 
@@ -127,10 +167,7 @@ def convert_multitask_dict(labels, indicies):
 
 
 
-def load_pretrained(path):
-    model = TransformerModel((128,3), 1)
-    model.load_state_dict(torch.load(path))
-    return model
+
 
 def save_model(model, folder, name): #TODO: Add model.extract_core to the model
     model = model.extract_core()

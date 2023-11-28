@@ -10,10 +10,11 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from UserDataLoader import UserDataLoader
-from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel
+from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel, MultiModalTransformer
+from transfer_model import TransferModel, TransferModelClassification
 from utils.configuration_utils import modals
 from utils.model_utils import train_epoch, MultiTaskLoss, SingleClassificationFormatter, BinaryClassificationFormatter, \
-    MMS_loss
+    MMS_loss, temp_train_epoch
 from utils.transformation_utils import transform_funcs_vectorized, transform_funcs_names
 from fast_pytorch_kmeans import KMeans
 
@@ -57,7 +58,7 @@ class Training_Task:
 
     def save_model(self):
         os.makedirs(self.dir, exist_ok=True) # make a new directory if it does not exist
-        torch.save(self.model.state_dict(), os.path.join(self.dir,self.save_file)) # save the model
+        torch.save(self.model.extract_core(), os.path.join(self.dir,self.save_file)) # save the model
 
     def train_task_setup(self):
         self.dataset.keep_modalities(self.modal_range)
@@ -158,15 +159,80 @@ def match_configuration(config, key):
         return None
 
 
+class TransferLearningClassificationTask(Training_Task):
+    TASK_NAME = "transfer_learning_classification_task"
+    def __init__(self, dataset: UserDataLoader, pretrained_core: str, feature_extractor_paths: list, modalities=None, **kwargs):
+        self.pretrained_path = pretrained_core
+        self.pretrained_ft_extract = feature_extractor_paths
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=kwargs["epochs"])
+
+
+    def create_model(self):
+        model = TransferModel(self.pretrained_ft_extract)
+        model_sd = model.state_dict()
+        state_d = torch.load(self.pretrained_path)
+        print(state_d)
+        for name, param in state_d.items():
+            if name in model_sd:
+                if param.size() == model_sd[name].size():
+                    print(f'just  right {name}')
+                    model_sd[name].copy_(param)
+                else:
+                    print(f"Size mismatch for layer {name}. Skipping.")
+            else:
+                print(f"Layer {name} not found in the modified model. Skipping.")
+
+        model.load_state_dict(state_d, strict=False)
+
+        for p in model.parameters():
+            p.requires_grad = False
+
+        self.model = TransferModelClassification(model,13)
+
+    def get_training_data(self):
+        return self.dataset.transform_train, self.dataset.transform_label
+
+    def train_task_setup(self):
+        # this will set up the trainin
+        super().train_task_setup()
+        # self.dataset.transform_sets(self.transformations)  # transform the data
+
+    def get_training_data(self):
+        return self.dataset.train, self.dataset.train_label
+
+    def get_output_formatter(self):
+        return SingleClassificationFormatter()
+
+
+
+    def train(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
+        self.train_task_setup()  # will set up the training
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+        training, training_label = self.get_training_data()
+        for epoch in range(1, self.epochs + 1):
+            temp_train_epoch(self.model, epoch, training, training_label, output_formatter=self.get_output_formatter(),
+                        optimizer=optimizer, loss_fn=self.get_loss(), device=device)
+            # self.save_model()
+        self.save_model()
+
+
+    def get_loss(self):
+        return nn.CrossEntropyLoss()
+
+
 
 class Multi_Modal_Clustering_Task(Training_Task):
     TASK_NAME = "multi_modal_clustering_task"
-    def __init__(self, dataset: UserDataLoader,  epochs=80, **kwargs):
+    def __init__(self, dataset: UserDataLoader, modalities=None,   epochs=80, **kwargs):
         # use the silhouette score in kmeans
+        self.feature_extractor_path = kwargs["feature_extractor_paths"]
         super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs)
+
         self.dataset = dataset
     def create_model(self):
-        self.model = None
+        self.model = MultiModalTransformer((128,3), self.feature_extractor_path,2,256)
         pass
 
     def train_task_setup(self):
@@ -177,15 +243,16 @@ class Multi_Modal_Clustering_Task(Training_Task):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(device)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
-        training, training_label = self.get_training_data()
+        training = self.dataset.train
         loss_op = MMS_loss()
         loss_op.to(device)
         for epoch in range(1, self.epochs + 1):
             # now you will train each batch
+            print(f'epoch {epoch}')
             queue_v = None
             use_the_queue = False
             centroid = None
-            batch_size = 64
+            batch_size = 128
 
 
             permutation = torch.randperm(training.shape[0])
@@ -195,8 +262,8 @@ class Multi_Modal_Clustering_Task(Training_Task):
                 # data = data.to(device)
                 data = training[permutation[i:i + batch_size]]
 
-                acc = data[:, :, 0:3].to(device)
-                gyro = data[:, :, 3:6].to(device)
+                acc = torch.from_numpy(data[:, :, 0:3]).to(device)
+                gyro = torch.from_numpy(data[:, :, 3:6]).to(device)
                 with torch.set_grad_enabled(True):
                     acc_ft, gyro_ft, classified_acc, classified_gyro, recon_loss = self.model(acc,gyro)
                     recon_weight = 50
@@ -206,7 +273,8 @@ class Multi_Modal_Clustering_Task(Training_Task):
                     gyro_out = classified_gyro
 
                     fused_data = (acc_out + gyro_out) / 2 # joining the extracted features so that they can be clustered
-
+                    if fused_data.shape[0] < 32:
+                        continue
 
                     sim_audio_acc = torch.matmul(acc_ft, gyro_ft.t()) #calculates the ismilarity between the gyro and the acc
                     sim_audio_gyro = torch.matmul(gyro_ft, acc_ft.t()) # calculates the similarity between the acc and the gyro
@@ -221,12 +289,15 @@ class Multi_Modal_Clustering_Task(Training_Task):
                     # get the labels for the items in the batch
                     loss_val = cluster_contrastive(fused_data, centroid, labels[-batch_size:], batch_size)
                     loss += loss_val * 1 # clustering lambda
+
                     loss += recon_loss
+                    print(f"epoch {epoch}: loss cluster contrastive {loss_val} and reconstruction + contrastive1: {recon_loss}")
                     loss.backward()
                     optimizer.step()
 
-                    return loss.item(), queue_v, use_the_queue, centroid
-
+                    # return loss.item(), queue_v, use_the_queue, centroid
+        # save the model
+        torch.save(self.model.state_dict(),os.path.join(self.dir,self.save_file))
 
     def train_one_epoch(self, model, opt, data, loss_fn, scheduler):
         pass
@@ -257,12 +328,13 @@ def cluster_contrastive(fushed,centroid,labels,bs):
 
 
 def update_queue(queue,use_the_queue,fuse):
-    bs = int(4096/2)
+    # return queue,fuse,use_the_queue
+    bs = int(1024)
     fuse2 = fuse.detach()
-    fuse2 = fuse2.view(-1, 32, fuse2.shape[-1])
-    fuse2 = fuse2[:,:16,:]
-    fuse2 = fuse2.reshape(-1, fuse2.shape[-1])
-    out = fuse.detach()
+    fuse2 = fuse2.view(-1, 32, fuse2.shape[-1]) # this breaks the fused array into a 3D array of inferred dimension x 32 x last dimension
+    fuse2 = fuse2[:,:16,:] # break into blocks of 16
+    fuse2 = fuse2.reshape(-1, fuse2.shape[-1]) # brig back to 2D of dimensions inferred x last dim
+    out = fuse.detach() # when the dimension is inferred this means that it keeps the number of elements the same
     if queue is not None:  # no queue in first round
         if use_the_queue or not torch.all(queue[ -1, :] == 0):  # queue[2,3840,128] if never use the queue or the queue is not full
             use_the_queue = True
@@ -278,5 +350,6 @@ def update_queue(queue,use_the_queue,fuse):
 PRETEXT_TASKS = {
     Transformation_Classification_Task.TASK_NAME: Transformation_Classification_Task,
     Multi_Modal_Clustering_Task.TASK_NAME: Multi_Modal_Clustering_Task,
-    Classification_Task.TASK_NAME: Classification_Task
+    Classification_Task.TASK_NAME: Classification_Task,
+    TransferLearningClassificationTask.TASK_NAME: TransferLearningClassificationTask
 }

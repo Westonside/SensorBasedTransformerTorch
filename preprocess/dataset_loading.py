@@ -45,12 +45,25 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
     central_train_label_align = []
     central_test_label_align = []
     for i, dataset in enumerate(selected_datasets):
+        #TODO JUST USE A MAP TO MAP OVER THE DATASETES AND CONVERT THE LABELS
         if dataset == "MotionSense": #this converts the label to the correct label
             central_train_label_align.append([Motion_Sense[labelIndex] for labelIndex in training_labels[i]])
             central_test_label_align.append([Motion_Sense[label_index] for label_index in testing_labels[i]])
         elif (dataset == 'HHAR'):
             central_train_label_align.append(np.hstack([HHAR[labelIndex] for labelIndex in training_labels[i]]))
-            central_test_label_align.append(np.hstack([HHAR[labelIndex] for labelIndex in training_labels[i]]))
+            central_test_label_align.append(np.hstack([HHAR[labelIndex] for labelIndex in testing_labels[i]]))
+
+        elif dataset == "UCI":
+            central_train_label_align.append(np.hstack([UCI[labelIndex] for labelIndex in training_labels[i]]))
+            central_test_label_align.append(np.hstack([UCI[labelIndex] for labelIndex in testing_labels[i]]))
+        elif (dataset == 'RealWorld'):
+            central_train_label_align.append(
+                np.hstack([REALWORLD_CLIENT[labelIndex] for labelIndex in training_labels[i]]))
+            central_test_label_align.append(
+                np.hstack([REALWORLD_CLIENT[labelIndex] for labelIndex in testing_labels[i]]))
+        elif dataset == "SHL":
+            central_train_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in training_labels[i]]))
+            central_test_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in training_labels[i]]))
 
     training_data = np.vstack(training_data)
     training_labels = np.hstack(central_train_label_align)
@@ -67,7 +80,7 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
                                                      num_classes=len(align_all_classes)).numpy()
 
     # now that the data is one hot encoded we can now create the dataset
-    if validation:
+    if validation: # it is importnat to note that the testing data has already been generated to avoid data leakage
         X_train, X_val, y_train, y_val = train_test_split(training_data, one_hot_training_labels, test_size=0.10)
 
         dataset = UserDataLoader((X_train, y_train), (testing_data, central_test_label), align_all_classes, validation_data=(X_val, y_val))
@@ -132,8 +145,7 @@ def load_clients_data(path: str, num_clients: int):
 def load_hhar(path):
     # get the data
     client_data, client_labels = load_clients_data(path, dataset_classes_users_map["HHAR"][1])
-    orientations = hkl.load([os.path.join(path,file) for file in os.listdir(path) if "device" in file.lower()][0])
-    orientationsNames = ['nexus4', 'lgwatch', 's3', 's3mini', 'gear', 'samsungold']
+
     train, test, orientation = load_data(client_data, client_labels, 0.1, 0.1)
 
     # for i in range(dataset_classes_users_map["HHAR"][1]): # for all clients
@@ -154,12 +166,54 @@ def load_motion_sense(path: str):
     print('testing')
     train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), client_orientation
-def load_realworld(): # for now I ignore this because there are differing orientations
-    pass
 
 
-def load_uci():
+
+def load_uci(path: str):
+    central_train_data = hkl.load(os.path.join(path,'trainX.hkl'))
+    central_test_data = hkl.load(os.path.join(path,'testX.hkl'))
+    central_train_label = hkl.load(os.path.join(path, 'trainY.hkl'))
+    central_test_label = hkl.load(os.path.join(path,'testY.hkl'))
+
+    return (central_train_data, central_train_label), (central_test_data,central_test_label), ()
+
+
+
+def load_realworld(path: str):
+    client_data = os.path.join(path, [x for x in os.listdir(path) if "data" in x.lower()][0])
+    client_labels = os.path.join(path, [x for x in os.listdir(path) if "label" in x.lower()][0])
+    client_data = hkl.load(client_data)
+    client_labels = hkl.load(client_labels)
+    clients = dataset_classes_users_map["RealWorld"][1]
+    client_data_train = {new_list: [] for new_list in range(clients)}
+    client_train_label = {new_list: [] for new_list in range(clients)}
+    for client_data_value, client_label in zip(client_data, client_labels):
+        for i in range(clients): # for each of the clients
+            cur_client_data, cur_client_label = client_data_value[i], client_label[i] # get the current clients data and labels
+            client_data_train[i].append(cur_client_data)
+            client_train_label[i].append(cur_client_label)
+    for i in range(clients):
+        client_data_train[i] = np.vstack(client_data_train[i])
+        client_train_label[i] = np.hstack(client_train_label[i])
+    train, test, orientation = load_data(client_data_train, client_train_label, 0.1, 0.1)
+    train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
+    return (train_data, train_labels), (test_data, test_labels), ()
+
+    print('added')
+
     pass
+
+def load_shl(path: str):
+    client_data = os.path.join(path, [x for x in os.listdir(path) if "data" in x.lower()][0])
+    client_labels = os.path.join(path, [x for x in os.listdir(path) if "label" in x.lower()][0])
+    client_data = hkl.load(client_data)
+    client_labels = hkl.load(client_labels)
+
+    client_data_train = {i: data for i, data in enumerate(client_data)}
+    client_train_label = {i: label for i, label in enumerate(client_labels)}
+    train, test, orientation = load_data(client_data_train, client_train_label, 0.1, 0.1)
+    train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
+    return (train_data, train_labels), (test_data, test_labels), ()
 
 
 dataset_classes_users_map ={
@@ -167,14 +221,17 @@ dataset_classes_users_map ={
     "HHAR": (load_hhar, 51),
     "MotionSense": (load_motion_sense, 24),
     # "RealWorld": (load_realworld, 15)
-    "UCI": (load_uci, 5)
+    "UCI": (load_uci, 5),
+    "RealWorld": (load_realworld, 15),
+    "SHL": (load_shl, 9)
 }
 
 dataset_training_classes = {
     "HHAR": [],
     "MotionSense": ['Downstairs', 'Upstairs', 'Sitting', 'Standing', 'Walking', 'Jogging'],
-    "RealWorld": ['Downstairs','Upstairs', 'Jumping','Lay', 'Running', 'Sitting', 'Standing', 'Walking'],
-    "UCI": []
+    "RealWorld": ['Downstairs','Upstairs', 'Jumping','Lying', 'Running', 'Sitting', 'Standing', 'Walking'],
+    "UCI": ['Walking', 'Upstair','Downstair', 'Sitting', 'Standing', 'Lying'],
+    "SHL": ['Standing','Walking','Runing','Biking','Car','Bus','Train','Subway']
 
 
 }
@@ -183,5 +240,5 @@ dataset_training_classes = {
 
 
 if __name__ == '__main__':
-    load_datasets(["MotionSense"])
+    load_datasets(["UCI"])
     pass

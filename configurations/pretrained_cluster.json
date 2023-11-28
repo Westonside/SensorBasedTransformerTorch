@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "type": "transfer_learning_classification_task",
+      "modalities": ["accelerometer", "gyroscope"],
+      "load_files": ["MotionSense"],
+      "epochs": 130,
+      "pretrained_core": "models/multi_modal_clustering_model_trained.pt",
+      "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
+      "save_dir": "models",
+      "save_file": "transfer_learning_classification.pt"
+    }
+  ]
+}

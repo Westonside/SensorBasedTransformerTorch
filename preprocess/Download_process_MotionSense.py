@@ -3,8 +3,10 @@ import os
 import hickle as hkl
 import numpy as np
 
-from preprocess import preprocess_utils
-from preprocess.preprocess_utils import  download_and_extract
+#from preprocess import preprocess_utils
+import preprocess_utils
+from preprocess_utils import download_and_extract
+#from preprocess.preprocess_utils import  download_and_extract
 import pandas as pd
 
 file_name = ["A_DeviceMotion_data"]

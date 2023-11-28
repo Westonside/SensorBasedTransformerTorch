@@ -49,36 +49,6 @@ def main(configuration_file: str):
     R = projection_half // filter_attention
 
     segmentTime = [x for x in range(0, segment_size - frame_length+ time_step, time_step)]
-
-    #TODO: allow for actually getting the number of clients I am just hard coding for now
-    client_count = 24
-    # TODO: make a dataloader for the data set
-    # main_dir = "../HART/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/"
-    # dataset_loader = loadDataset(data_set_name, client_count, None, None, main_dir)
-    # central_train_data = dataset_loader.centralTrainData
-    # central_train_label = dataset_loader.centralTrainLabel
-    #
-    # central_test_data = dataset_loader.centralTestData
-    # central_test_label = dataset_loader.centralTestLabel
-    #
-    # client_orientation_train_data = dataset_loader.clientDataTrain
-    # client_orientation_train_label = dataset_loader.clientLabelTrain
-    # orientation_names = dataset_loader.orientationsNames
-    #
-    # central_train_data, central_dev_data, central_train_label, central_dev_label = train_test_split(central_train_data, central_train_label, test_size=0.125, random_state=42)
-
-    # temp_weights = class_weight.compute_class_weight('balanced', classes=np.unique(central_train_label), y=central_train_label.ravel())
-    # class_weights = {j: temp_weights[j] for j in range(len(temp_weights))}
-
-
-    # get the one hot of the labels
-    # central_train_label = torch.nn.functional.one_hot(torch.from_numpy(central_train_label), num_classes=activity_count).numpy()
-    # central_test_label = torch.nn.functional.one_hot(torch.from_numpy(central_test_label), num_classes=activity_count).numpy()
-    # central_dev_label = torch.nn.functional.one_hot(torch.from_numpy(central_dev_label), num_classes=activity_count).numpy()
-
-
-
-
     # model = TransformerClassificationModel(input_shape,activity_count, modal_count=2)
 
     # define the optimizer here
@@ -97,7 +67,6 @@ def main(configuration_file: str):
         # for training_tasks in  training_tasks:
         print(configuration)
         dataset = load_datasets(match_config_key(configuration, "load_files"), path="./datasets/processed")
-
         task = match_configuration(configuration, 'type')(dataset, **configuration)
         task.train()
 
@@ -110,6 +79,7 @@ def main(configuration_file: str):
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     configuration_file = "./configurations/basic_configuration.json"
+
     main(configuration_file)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

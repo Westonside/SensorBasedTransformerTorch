@@ -1,11 +1,11 @@
 import math
+import os
 
 import numpy as np
 import torch
 from torch import nn, Tensor
 from torch.nn import ModuleList
 
-from utils.model_utils import load_pretrained
 
 """
     This will take a code from the end of the module and then it will take the module itself
@@ -196,8 +196,8 @@ class TransformerClassificationModel(nn.Module):
         logits = self.softmax(logits)
         return logits
 
-    def extract_core(self, x):
-        return self.transformer_core(x)
+    def extract_core(self):
+        return self.transformer_core
 
 class TransformerMultiTaskBinaryClassificationModel(nn.Module):
     def __init__(self, input_shape, classification_heads:int, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
@@ -224,8 +224,8 @@ class TransformerMultiTaskBinaryClassificationModel(nn.Module):
         # return torch.dstack(outputs).squeeze()
         # return torch.stac
 
-    def extract_core(self, x):
-        return self.transformer_core(x)
+    def extract_core(self):
+        return self.transformer_core
 
 class SensorPatches(nn.Module):
     def __init__(self,projection_dim,patchSize,timeStep, num_modal=2):
@@ -406,13 +406,17 @@ class MLPHead(nn.Module):
         return x
 
 class MultiModalTransformer(nn.Module):
-    def __init__(self, input_shape, activity_count:int, modals:int, cluster_size: int, embed_dim:int, projection_dim: int, reconstruction_size=768, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+    def __init__(self, input_shape, pretrained_modals: list , modals:int, cluster_size: int, embed_dim=1024, projection_dim=2000, reconstruction_size=768, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(MultiModalTransformer, self).__init__()
         # first we need to get our feature extractors which will be our trained transformer models
-        self.feature_extractors = ModuleList()
-        self.gating_units = ModuleList()
-        self.acc_ft_ext = load_pretrained("accelerometer_extract.pt")
-        self.gyro_ft_ext = load_pretrained("gyroscope_extract.pt")
+
+        pretrained_modals = list(map(lambda x: os.path.join(os.curdir, x), pretrained_modals))
+
+        self.acc_ft_ext = load_pretrained(list(filter(lambda x: "acc" in x, pretrained_modals))[0])
+        self.gyro_ft_ext = load_pretrained(list(filter(lambda x: "gyro" in x, pretrained_modals))[0])
+        freeze_models([self.gyro_ft_ext,self.acc_ft_ext])
+        self.acc_gated = Gated_Embedding_Unit(1024,embed_dim)
+        self.gyro_gated = Gated_Embedding_Unit(1024,embed_dim)
         # there is no need for a projection layer because the transformer outputs the same dimensions
         self.modals = modals
         # the reconstruction parts
@@ -420,22 +424,21 @@ class MultiModalTransformer(nn.Module):
 
         self.projection_head = nn.Sequential(
             nn.Linear(embed_dim, projection_dim),
-            nn.BatchNorm1d(embed_dim//8),
+            nn.BatchNorm1d(projection_dim),
             nn.ReLU(inplace=True),
             nn.Linear(projection_dim, cluster_size)
         )
         self.classification = nn.Linear(cluster_size, projection_dim, bias=False)
 
-
         for _ in range(modals):
             self.reconstruction_list.append(nn.Sequential(
-                nn.Linear(projection_dim, reconstruction_size),
+                nn.Linear(embed_dim, reconstruction_size),
                 nn.ReLU(inplace=True),
-                nn.Linear(reconstruction_size, input_shape[1]),
+                nn.Linear(reconstruction_size, 1024),
                 nn.ReLU(inplace=True)
             ))
 
-        self.mse - nn.MSELoss(reduction='none')
+        self.mse = nn.MSELoss(reduction='none')
 
     def forward(self, acc, gyro, mag=None):
         # extract all features
@@ -446,15 +449,21 @@ class MultiModalTransformer(nn.Module):
         gyro_reconstruction_gt = gyro_features
 
         # now we will pass the features through the gating untis
-        acc_gated_features = self.gating_units[0](acc_features)
-        gyro_gated_features = self.gating_units[1](gyro_features)
+        acc_gated_features = self.acc_gated(acc_features)
+        gyro_gated_features = self.gyro_gated(gyro_features)
         # now we will normalize the gated features
         reconstruct_acc = self.reconstruction_list[0](acc_gated_features)
         reconstruct_gyro = self.reconstruction_list[1](gyro_gated_features)
+        # now we will project
+        gated_project_acc = self.projection_head(acc_gated_features)
+        gated_project_gyro = self.projection_head(gyro_gated_features)
 
-        # now we will normalize the gated features
-        normalized_acc = nn.functional.normalize(acc_gated_features, dim=1, p=2)
-        normalized_gyro = nn.functional.normalize(gyro_gated_features, dim=1, p=2)
+        # now we will normalize the projected
+        normalized_acc = nn.functional.normalize(gated_project_acc, dim=1, p=2)
+        normalized_gyro = nn.functional.normalize(gated_project_gyro, dim=1, p=2)
+
+
+
         # now we will classify the normalized features
         classification_acc = self.classification(normalized_acc)
         classification_gyro = self.classification(normalized_gyro)
@@ -495,3 +504,19 @@ class Context_Gating(nn.Module):
         x1 = self.fc(x)
         x = torch.cat((x, x1), 1) # combine the input before projection with the projected input
         return nn.functional.glu(x, 1) # gated linear unit
+
+
+def load_pretrained(path: str):
+    # model = TransformerMultiTaskBinaryClassificationModel((128,3), 1)
+    # model = model.extract_core()
+    model = torch.load(path)
+    return model
+
+
+
+def freeze_models(models: list):
+    for model in models:
+        for param in model.parameters():
+            param.requires_grad = False
+
+
