@@ -5,8 +5,10 @@ from torch import nn
 
 from model import load_pretrained, Gated_Embedding_Unit
 
+global_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class TransferModel(nn.Module):
+    NAME = "TRANSFER_MODEL_CLUSTERING"
     def __init__(self,  pretrained_feature_extractors:list, embed_dim=96):
         super(TransferModel,self).__init__()
         pretrained_modals = list(map(lambda x: os.path.join(os.curdir, x), pretrained_feature_extractors))
@@ -18,11 +20,12 @@ class TransferModel(nn.Module):
         self.gyro_gated = Gated_Embedding_Unit(1024,1024)
 
     def forward(self, acc, gyro):
-        acc = self.acc_gated(self.acc_ft_ext(acc))
-        gyro = self.gyro_gated(self.gyro_ft_ext(gyro))
-
-        # return torch.matmul(acc, gyro.t())
-        return acc, gyro #experiement with concatentating each of these
+        acc_extracted = self.acc_ft_ext(acc)
+        gyro_extracted = self.gyro_ft_ext(gyro)
+        acc = self.acc_gated(acc_extracted)
+        gyro = self.gyro_gated(gyro_extracted)
+        return torch.concat((acc,gyro), dim=1)
+        # return acc, gyro #experiement with concatentating each of these
 
 
 class TransferModelClassification(nn.Module):
@@ -33,7 +36,7 @@ class TransferModelClassification(nn.Module):
 
 
     def forward(self, acc, gyro):
-        acc,gyro = self.transfer_core(acc,gyro)
+        features = self.transfer_core(acc,gyro)
         # return self.classification(acc)
-        return self.classification(torch.concat((acc,gyro), dim=2)) #TODO: test concat the features with clasisification accuracy
+        return self.classification(features)
 

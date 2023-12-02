@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "type": "features_extraction_task",
+      "modalities": ["accelerometer", "gyroscope"],
+      "load_files": ["SHL"],
+      "model_type": "TRANSFER_MODEL_CLUSTERING",
+      "epochs": 80,
+      "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
+      "save_dir": "models",
+      "save_file": "multi_modal_clustering_model_trained.pt"
+    }
+  ]
+}

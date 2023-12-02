@@ -22,14 +22,17 @@ class UserDataLoader(Dataset):
         self.transform_validation_label = None
 
 
+    def combine_training_validation(self):
+        self.train = np.concatenate((self.train, self.validation), axis=0)
+        self.train_label = np.concatenate((self.train_label, self.validation_label), axis=0)
 
     def transform_sets(self, transformation_functions: list):
         # this function will join the validation and the training together and then perform the transformations
         # then it will split the data back into the validation and training sets
-
+        # self.train = np.concatenate((self.train, self.validation), axis=0)
+        # self.train_label = np.concatenate((self.train_label, self.validation_label), axis=0)
         if hasattr(self, 'validation'):
-            self.train = np.concatenate((self.train, self.validation), axis=0)
-            self.train_label = np.concatenate((self.train_label, self.validation_label), axis=0)
+            self.combine_training_validation()
             self.transform_train, self.transform_label = self.generate_transform_data(self.train, transformation_functions)
             # now that you have generated the transformations, you need to split the data back into the validation and training sets
             multi_task_transform = (self.transform_train, (map_multitask_y(self.transform_label, transform_funcs_names)))

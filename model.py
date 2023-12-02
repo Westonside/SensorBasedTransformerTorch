@@ -57,7 +57,7 @@ def process_module(code , module, branch_outputs: dict):
 
 
 class TransformerModel(nn.Module):
-
+    TRANSFORMER_MODEL_NAME = "Transformer_Model"
     def __init__(self, input_shape ,  modal_count=2, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super().__init__()
         self.model_type = 'Transformer'
@@ -406,6 +406,7 @@ class MLPHead(nn.Module):
         return x
 
 class MultiModalTransformer(nn.Module):
+    MULTI_MODAL_TRANSFORMER = "MULTI_MODAL_CLUSTERING"
     def __init__(self, input_shape, pretrained_modals: list , modals:int, cluster_size: int, embed_dim=1024, projection_dim=2000, reconstruction_size=768, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(MultiModalTransformer, self).__init__()
         # first we need to get our feature extractors which will be our trained transformer models
@@ -486,11 +487,11 @@ class MultiModalTransformer(nn.Module):
 class Gated_Embedding_Unit(nn.Module):
     def __init__(self, input_dimension, output_dimension):
         super(Gated_Embedding_Unit, self).__init__()
-        self.fc = nn.Linear(input_dimension, output_dimension) # fully coneccted layer to project to a given dimension
+        self.fc = nn.Linear(input_dimension, output_dimension)# fully coneccted layer to project to a given dimension
         self.cg = Context_Gating(output_dimension) # the context gating unit
 
     def forward(self, x):
-        x = self.fc(x) # pass through the linear layer
+        x = self.fc(x.to(global_device)) # pass through the linear layer
         x = self.cg(x)  # pass through the context gating unit
         return x
 

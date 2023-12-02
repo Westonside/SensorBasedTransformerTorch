@@ -8,13 +8,13 @@ import os
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-
+import hickle as hkl
 from UserDataLoader import UserDataLoader
 from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel, MultiModalTransformer
 from transfer_model import TransferModel, TransferModelClassification
 from utils.configuration_utils import modals
 from utils.model_utils import train_epoch, MultiTaskLoss, SingleClassificationFormatter, BinaryClassificationFormatter, \
-    MMS_loss, temp_train_epoch
+    MMS_loss, temp_train_epoch, EarlyStop, validation, extract_features
 from utils.transformation_utils import transform_funcs_vectorized, transform_funcs_names
 from fast_pytorch_kmeans import KMeans
 
@@ -24,7 +24,7 @@ def pretext_one():
 
 class Training_Task:
     # this will either load the model or create the model
-    def __init__(self, dataset, modalities, save_dir: str, save_file: str,  epochs=80, early_stop=False):
+    def __init__(self, dataset, modalities, save_dir: str, save_file: str,  epochs=80, early_stop_patience=None):
         self.model = None
         self.dataset = dataset
         self.dir = save_dir
@@ -38,6 +38,10 @@ class Training_Task:
         self.sequence_length = dataset.train.shape[1]
         self.models_path = "./models"
         self.create_model()
+        if early_stop_patience is not None:
+            self.get_early_stop(early_stop_patience)
+        else:
+            self.early_stopping = None
         # if previous_task_path is None:
         #     self.create_model()
         # else:
@@ -72,6 +76,12 @@ class Training_Task:
     def get_training_data(self):
         pass
 
+    def get_testing_data(self):
+        pass
+
+    def get_early_stop(self, patience: int):
+       self.early_stopping = EarlyStop(patience)
+
     def train(self):
         # move the device to gpu
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -82,9 +92,16 @@ class Training_Task:
         for epoch in range(1, self.epochs + 1):
             train_epoch(self.model, epoch, training, training_label, output_formatter=self.get_output_formatter(),
                         optimizer=optimizer, loss_fn=self.get_loss(), device=device)
+            if self.early_stopping is not None:
+                stop = self.early_stopping.check(validation(self.model, epoch,  *self.get_validation_data(), self.get_loss(), self.get_output_formatter(), device))
+                if stop: # if you are to stop
+                    break
             # self.save_model()
         self.save_model()
 
+
+    def get_validation_data(self) -> tuple:
+        return self.dataset.validation, self.dataset.validation_label
 
     def get_loss(self):
         pass
@@ -118,7 +135,7 @@ class Classification_Task(Training_Task):
 class Transformation_Classification_Task(Training_Task):
     TASK_NAME = "transformation_classification_task"
     def __init__(self, dataset: UserDataLoader, epochs=80, modalities=["accelerometer"],  **kwargs):
-        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs)
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs, early_stop_patience=kwargs["early_stopping_patience"])
         self.model = None
         self.transformations = transform_funcs_vectorized
         self.create_model()
@@ -134,6 +151,8 @@ class Transformation_Classification_Task(Training_Task):
         #TODO: remove the magic number
         self.model = TransformerMultiTaskBinaryClassificationModel((self.sequence_length,3), len(transform_funcs_vectorized))
 
+    def get_validation_data(self) -> tuple:
+        return self.dataset.transform_validation, self.dataset.transform_validation_label
 
     def get_training_data(self):
         return self.dataset.transform_train, self.dataset.transform_label
@@ -205,21 +224,69 @@ class TransferLearningClassificationTask(Training_Task):
 
 
 
-    def train(self):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(device)
-        self.train_task_setup()  # will set up the training
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
-        training, training_label = self.get_training_data()
-        for epoch in range(1, self.epochs + 1):
-            temp_train_epoch(self.model, epoch, training, training_label, output_formatter=self.get_output_formatter(),
-                        optimizer=optimizer, loss_fn=self.get_loss(), device=device)
-            # self.save_model()
-        self.save_model()
+    # def train(self):
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     self.model.to(device)
+    #     self.train_task_setup()  # will set up the training
+    #     optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+    #     training, training_label = self.get_training_data()
+    #     for epoch in range(1, self.epochs + 1):
+    #         temp_train_epoch(self.model, epoch, training, training_label, output_formatter=self.get_output_formatter(),
+    #                     optimizer=optimizer, loss_fn=self.get_loss(), device=device)
+    #         # self.save_model()
+    #
+    #     self.save_model()
 
 
     def get_loss(self):
         return nn.CrossEntropyLoss()
+
+
+
+
+class FeatureExtractionTask(Training_Task):
+    TASK_NAME = "features_extraction_task"
+
+    def __init__(self, dataset: UserDataLoader, model_type: str, feature_extractor_paths: list, save_file: str, save_dir: str, modalities=None, **kwargs):
+        self.model_type = model_type
+        self.feature_extractor_path = feature_extractor_paths
+
+        super().__init__(dataset, save_file=save_file, save_dir=save_dir, modalities=modalities)
+        dataset.combine_training_validation()  # combine the training and the validation data
+
+    def create_model(self):
+        if self.model_type == TransferModel.NAME:
+            self.model = TransferModel(self.feature_extractor_path)
+
+    def get_training_data(self):
+        return self.dataset.train,self.dataset.train_label
+
+    def get_testing_data(self):
+        return self.dataset.test, self.dataset.test_label
+
+    def train(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = self.model
+        model.to(device)
+        model.eval()
+        # now you will through the data and predict batch the input and labels
+        data, labels = self.get_training_data()
+        training_features = extract_features(model,data, device=device)
+        test_data, test_labels = self.get_testing_data()
+        test_features = extract_features(model,data, device=device)
+        # now you will save the features
+        data =  {
+            "train_data": (training_features, labels),
+            "testing_data": (test_features, test_labels)
+        }
+        os.makedirs(self.dir, exist_ok=True)
+        with open(os.path.join(self.dir,f"feature_extraction_{self.save_file}.hkl"), 'wb') as f:
+            hkl.dump(data,f)
+
+
+
+
+
 
 
 
@@ -229,6 +296,7 @@ class Multi_Modal_Clustering_Task(Training_Task):
         # use the silhouette score in kmeans
         self.feature_extractor_path = kwargs["feature_extractor_paths"]
         super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs)
+
 
         self.dataset = dataset
     def create_model(self):
@@ -347,9 +415,16 @@ def update_queue(queue,use_the_queue,fuse):
         queue[:bs] = fuse2
     return queue,out,use_the_queue
 
+
+
+
+
+
+
 PRETEXT_TASKS = {
     Transformation_Classification_Task.TASK_NAME: Transformation_Classification_Task,
     Multi_Modal_Clustering_Task.TASK_NAME: Multi_Modal_Clustering_Task,
     Classification_Task.TASK_NAME: Classification_Task,
-    TransferLearningClassificationTask.TASK_NAME: TransferLearningClassificationTask
+    TransferLearningClassificationTask.TASK_NAME: TransferLearningClassificationTask,
+    FeatureExtractionTask.TASK_NAME: FeatureExtractionTask
 }

@@ -25,10 +25,10 @@ class OutputFormatter:
     def __init__(self, verbose=True):
         self.verbose = verbose
 
-    def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch, loss=None):
+    def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch, loss=None, valid=False):
        pass
 
-    def print_accuracy(self, epoch: int, loss=None):
+    def print_accuracy(self, epoch: int, loss=None, valid=False):
         if self.verbose:
             self.print_accuracy(epoch, loss)
 
@@ -40,7 +40,7 @@ class BinaryClassificationFormatter(OutputFormatter):
         self.class_accuracy = [(0, 0) for _ in range(tasks_count)]  # total correct, total
         self.task_names = task_names
 
-    def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch, loss=None):
+    def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch, loss=None, valid=False):
         predictions = (pred > 0.5).float()
         for i in range(self.tasks_count):
             correct, total = self.class_accuracy[i]
@@ -48,10 +48,10 @@ class BinaryClassificationFormatter(OutputFormatter):
             total += target[i].shape[0]
             self.class_accuracy[i] = (correct, total)
 
-        self.print_accuracy(epoch, loss=loss)
-    def print_accuracy(self, epoch: int, batch=None, loss=None):
-        print('Train Epoch: {} | Acc: {} | total loss: {}'.format(
-                epoch, self.format_accuracy(), loss if loss is not None else ""))
+        self.print_accuracy(epoch, loss=loss, valid=valid)
+    def print_accuracy(self, epoch: int, loss=None, valid=False):
+        print('{} Epoch: {} | Acc: {} | total loss: {}'.format(
+                "Train" if not validation else "Validation" ,epoch, self.format_accuracy(), loss if loss is not None else ""))
 
     def format_accuracy(self):
         output = ""
@@ -67,18 +67,30 @@ class SingleClassificationFormatter(OutputFormatter):
         self.correct = 0
         self.total = 0
 
-    def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch, loss=None):
+    def get_accuracy(self, pred: torch.Tensor, target: torch.Tensor, epoch, loss=None, valid=False):
         self.total += pred.shape[0]
-
         self.correct += torch.count_nonzero(torch.argmax(pred,dim=1)==torch.argmax(target,dim=1)).item()
-        super().print_accuracy(epoch, loss)
+        super().print_accuracy(epoch, loss, valid)
 
-    def print_accuracy(self, epoch: int, batch=None, loss=None):
-        print('Train Epoch: {} | Acc: {:.6f} | total loss: {}'.format(
-            epoch, (self.correct / self.total), loss if loss is not None else ""))
+    def print_accuracy(self, epoch: int, loss=None, valid=False):
+        print('{} Epoch: {} | Acc: {:.6f} | total loss: {}'.format(
+            "Train" if not valid else "Validation",epoch, (self.correct / self.total), loss if loss is not None else ""))
 
 
-def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=64, device="cuda"):
+
+def extract_features(model, data, device, batch_size=128):
+    outputs = []
+    for i in range(0, data.shape[0], batch_size):
+        model_in = data[i:i + batch_size]
+        acc = torch.from_numpy(model_in[:,:,:3]).float().to(device)
+        gyro = torch.from_numpy(model_in[:,:,3:]).float().to(device)
+        outputs.append(model(acc,gyro).detach().cpu())
+    print('feature extraction has been completed')
+    return np.vstack(data)
+
+
+
+def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, output_formatter, batch_size=128, device="cuda"):
     # print("Training")
     train_loss = 0.
     train_acc = 0.
@@ -101,7 +113,60 @@ def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, outpu
         train_loss += loss.item()
         loss.backward()
         optimizer.step()
-        output_formatter.get_accuracy(outputs, batch_y, epoch, loss)
+        output_formatter.get_accuracy(outputs, batch_y, epoch, loss, valid=False)
+
+
+
+class EarlyStop():
+    def __init__(self, patience: int, testing=False):
+       self.count = 0
+       self.patience = patience
+       self.best_loss = float("inf")
+       self.testing_counter = 0
+       self.testing = testing
+
+    def check(self, valid_loss: int) -> bool:
+        if self.testing:
+            self.testing_counter +=1
+            if self.testing_counter >= 3:
+                return True
+        if self.best_loss > valid_loss:
+            self.best_loss = valid_loss
+            self.count = 0
+        else:
+            self.count += 1
+        if self.count > self.patience:
+            return True
+        else:
+            return False
+
+
+def validation(model, epoch, validation_data, validation_labels, loss_fn, output_formatter, device):
+    valid_loss = 0.
+    valid_acc = 0.
+    correct = 0
+    total = 0
+    model.eval()
+
+    permutation = torch.randperm(validation_data.shape[0])
+    batch_size = 64
+    for i in range(0, validation_data.shape[0], batch_size):
+        indices = permutation[i:i + batch_size]
+        batch_x, batch_y = validation_data[indices], torch.from_numpy(validation_labels[indices]) if type(
+            validation_labels) is not dict else torch.stack(
+            [torch.from_numpy(validation_labels[key][indices]) for key in validation_labels.keys()])
+        # batch_x = torch.from_numpy(batch_x).float()
+        batch_x = torch.from_numpy(batch_x).float().to(device)
+        batch_y = (batch_y).float().to(device)
+        # batch_y = (batch_y).float()
+        outputs = model(batch_x)
+        # pred = torch.argmax(outputs, dim=1)
+        loss = loss_fn(outputs, batch_y)
+        valid_loss += loss.item()
+        output_formatter.get_accuracy(outputs, batch_y, epoch, loss, valid=True)
+
+    return valid_loss
+
 
 
 
@@ -137,6 +202,31 @@ def temp_train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, 
     # y = arg_max_predict(scores)
     print('done')
 
+
+def temp_validation(model, epoch, validation_data, validation_labels, loss_fn, output_formatter, device):
+    valid_loss = 0.
+    valid_acc = 0.
+    correct = 0
+    total = 0
+    model.eval()
+
+    permutation = torch.randperm(validation_data.shape[0])
+    batch_size = 64
+    for i in range(0, validation_data.shape[0], batch_size):
+        indices = permutation[i:i + batch_size]
+        batch_x, batch_y = validation_data[indices], torch.from_numpy(validation_labels[indices]) if type(
+            validation_labels) is not dict else torch.stack(
+            [torch.from_numpy(validation_labels[key][indices]) for key in validation_labels.keys()])
+        # batch_x = torch.from_numpy(batch_x).float()
+        batch_x = torch.from_numpy(batch_x).float().to(device)
+        batch_y = (batch_y).float().to(device)
+        # batch_y = (batch_y).float()
+        outputs = model(batch_x[:, :, :3], batch_x[:, :, 3:])
+        loss = loss_fn(outputs, batch_y)
+        valid_loss += loss.item()
+        output_formatter.get_accuracy(outputs, batch_y, epoch, loss, validation=True)
+
+    return valid_loss
 
 
 def arg_max_predict(scores):

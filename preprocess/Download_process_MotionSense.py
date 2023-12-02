@@ -41,7 +41,7 @@ def segment_client_file(client_file, client_index, client_dict: dict, time_step,
     # now segment the data
     #TODO MAKE IT SO THAT ALL SEQUENCES ARE THE SAME LENGTH BUT PADDING IS ADDED TO THE END SO THAT THE TRANSFORMER IGNORES IT
     segments = []
-    for i in range(0, acc_gyr.shape[0] - time_step, step):
+    for i in range(0, acc_gyr.shape[0] - time_step, step): # time step is 128 step is 64
        segments.append(acc_gyr[i:i + time_step, :])  # append the data to the segment array
     segments_res = np.asarray(segments)
     return segments_res.astype(np.float32)
