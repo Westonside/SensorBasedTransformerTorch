@@ -280,8 +280,7 @@ class FeatureExtractionTask(Training_Task):
             "testing_data": (test_features, test_labels)
         }
         os.makedirs(self.dir, exist_ok=True)
-        with open(os.path.join(self.dir,f"feature_extraction_{self.save_file}.hkl"), 'wb') as f:
-            hkl.dump(data,f)
+        hkl.dump(data, os.path.join(self.dir,self.save_file), mode='w')
 
 
 
