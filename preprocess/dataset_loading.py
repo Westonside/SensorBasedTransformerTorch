@@ -94,12 +94,16 @@ def remap_classes(train_labels, test_labels, total_labels):
     # get the unique labels
     unique_labels = list(np.unique(np.concatenate((train_labels,test_labels))))
     new_labels = [total_labels[i] for i in unique_labels]
-    for label, diff in zip(unique_labels, np.diff(unique_labels)):
-        if diff > 1:
-            train_labels[np.where(train_labels > label)[0]] = train_labels[np.where(train_labels > label)[0]] - (diff - 1)
-            test_labels[np.where(test_labels > label)] = test_labels[np.where(test_labels > label)] - (diff - 1)
+
+    # create a mapping from unique_labels to a new set of labels with a difference of 1
+    label_mapping = {label: i for i, label in enumerate(unique_labels)}
+
+    # replace the old labels with the new labels in train_labels and test_labels
+    train_labels = np.array([label_mapping[label] for label in train_labels])
+    test_labels = np.array([label_mapping[label] for label in test_labels])
 
     return train_labels, test_labels, new_labels
+
 
 
 """
