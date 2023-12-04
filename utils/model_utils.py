@@ -86,7 +86,7 @@ def extract_features(model, data, device, batch_size=128):
         gyro = torch.from_numpy(model_in[:,:,3:]).float().to(device)
         outputs.append(model(acc,gyro).detach().cpu())
     print('feature extraction has been completed')
-    return np.vstack(data)
+    return np.vstack(outputs)
 
 
 

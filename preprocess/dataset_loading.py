@@ -59,7 +59,7 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
 
         elif dataset == "SHL":
             central_train_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in training_labels[i]]))
-            central_test_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in training_labels[i]]))
+            central_test_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in testing_labels[i]]))
 
     training_data = np.vstack(training_data)
     training_labels = np.hstack(central_train_label_align)
@@ -74,7 +74,7 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
     training_labels, testing_labels, new_aligned_classes = remap_classes(training_labels,testing_labels, align_all_classes)
 
 
-    #TODO: shift the labels down after the remapping
+    #TODO: shift the labels down after the remapping add testing for the shifting
     one_hot_training_labels = torch.nn.functional.one_hot(torch.from_numpy(training_labels),
                                                       num_classes=len(new_aligned_classes)).numpy()
     central_test_label = torch.nn.functional.one_hot(torch.from_numpy(testing_labels),

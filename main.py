@@ -1,6 +1,7 @@
 # This is a sample Python script.
 import gc
 
+import hickle
 import numpy as np
 import torch.nn.functional
 
@@ -73,7 +74,6 @@ def main(configuration_file: str):
     #
     # task = Classification_Task(dataset, save_path="./", previous_task_path=None, epochs=80, early_stop=False,modalities=['accelerometer'])
     # task.train()
-
     for configuration in config['configurations']:
         # for training_tasks in  training_tasks:
         print(configuration)
@@ -89,7 +89,7 @@ def main(configuration_file: str):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    configuration_file = "./configurations/already_trained_extractors.json"
+    configuration_file = "./configurations/trained_clustering_ft_ext.json"
 
     main(configuration_file)
 

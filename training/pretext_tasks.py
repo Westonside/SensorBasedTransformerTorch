@@ -273,7 +273,7 @@ class FeatureExtractionTask(Training_Task):
         data, labels = self.get_training_data()
         training_features = extract_features(model,data, device=device)
         test_data, test_labels = self.get_testing_data()
-        test_features = extract_features(model,data, device=device)
+        test_features = extract_features(model,test_data, device=device)
         # now you will save the features
         data =  {
             "train_data": (training_features, labels),
