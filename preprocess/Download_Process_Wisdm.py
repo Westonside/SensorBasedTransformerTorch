@@ -1,7 +1,7 @@
 import os
 import re
 import threading
-
+import hickle as hkl
 from scipy.signal import resample
 import numpy as np
 # /static/public/507/wisdm+smartphone+and+smartwatch+activity+and+biometrics+dataset.zip
@@ -16,7 +16,26 @@ link = "https://archive.ics.uci.edu/static/public/507/wisdm+smartphone+and+smart
 
 # download_and_extract(["Wisdm"],[link], "../datasets" )
 root_folder = "../datasets/extracted/wisdm-dataset/raw"
-
+mapping = [
+     0,
+     7, # i am mapping jogging to running
+     1, # upstairs
+     3,
+     4,
+     13, #new key typing
+     14, # brush teeth
+     15, # soup
+     16,
+     17, # pasta
+     18, #drinking
+     19, #sandwich
+     20, #kicking
+     21, # catch
+     22, # dribbling
+     23, #writing
+     24, # clapping
+     25, # folding
+]
 
 
 
@@ -26,6 +45,12 @@ def prepare_data(data_file, modal_dict):
     data = data.to_numpy()
     modal_dict[os.path.basename(data_file)] = data
 
+def segment_data(seq, window_size, stride) -> list:
+    segments = []
+    for i in range(0,len(seq-window_size), stride):
+        segments.append(seq[i:i+window_size])
+    segments = [seg for seg in segments if seg.shape == (window_size, 6)]
+    return segments
 
 
 
@@ -78,62 +103,16 @@ threads = []
 lock = threading.Lock()
 
 window_size = 0
-for device in user_labels:
-    # for each of the users compare the acc and the gyro
-
-
-    users = user_labels[device][list(user_labels[device])[0]]
-    for user in users: # for all the users
-        classes_range = {}
-        for modal in user_labels[device]: # here you will compare the acc and gyro to find the shortest segments
-            pointer = 0
-            segment_num = 0
-            current_class = user_labels[device][modal][user][0]
-            user_data_point = user_labels[device][modal][user]
-            while(pointer < len(user_data[device][modal][user])):
-                # print('testing')
-                if(classes_range.get(segment_num) is None):
-                    classes_range[segment_num] = []
-                not_cur = np.where(user_data_point != current_class)[0]
-                if (len([x for x in not_cur if x > pointer]) == 0):
-                    print(pointer, len(user))
-                    break;
-                next_class = [x for x in not_cur if x > pointer][0]
-
-                #     break
-
-                indicies = range(pointer, next_class)
-                # resampling time
-                num_in_range = len(indicies)
-                data_in_range = user_data[device][modal][user][indicies]  # the data in the range
-                labels_in_range = user_labels[device][modal][user][indicies]
-                new_samples = int(num_in_range * (new_freq / old_freq))
-                not_current_count = np.count_nonzero(np.where(labels_in_range != current_class))
-                percent_incorrect = not_current_count / num_in_range
-                if not_current_count != 0:
-                    print('not zero count!!')
-                classes_range[segment_num].append(indicies)
-                pointer = next_class
-                current_class = user_labels[device][modal][user][next_class]
-                segment_num +=1
-        # the comparison time get the sum for each modal and then shorten the longest one
-        smallest_col_holder = []
-        for modal in user_labels[device]:
-            print('testing')
-
-
-
-print('testing')
 
 
 
 
 
-def modal_resample(modal):
-    for user_key in user_labels[modal]:
-        user = user_labels[modal][user_key]
-        user_container = []
-        user_label_container = []
+def modal_resample(device, modal):
+    for user_key in user_labels[device][modal]:
+        user = user_labels[device][modal][user_key]
+        user_container = {}
+        user_label_container = {}
         pointer = 0
         current_class = user[0]
         while pointer != len(user)-1:
@@ -148,8 +127,8 @@ def modal_resample(modal):
             indicies = range(pointer, next_class)
             # resampling time
             num_in_range = len(indicies)
-            data_in_range = user_data[modal][user_key][indicies] # the data in the range
-            labels_in_range = user_labels[modal][user_key][indicies]
+            data_in_range = user_data[device][modal][user_key][indicies] # the data in the range
+            labels_in_range = user_labels[device][modal][user_key][indicies]
             new_samples = int(num_in_range * (new_freq / old_freq))
             not_current_count = np.count_nonzero(np.where(labels_in_range != current_class))
             percent_incorrect =  not_current_count / num_in_range
@@ -159,22 +138,32 @@ def modal_resample(modal):
             for i in range(3):
                 resampled_section[:,i] = resample(data_in_range[:,i], new_samples)
             if percent_incorrect < 0.2:
-                user_container.append(resampled_section)
-                user_label_container.append(np.full(new_samples, fill_value=current_class)) #TODO CHANGE THIS SO EACH MODALITY GETS THE SAME LABEL
+                # add the values to the other dict
+                if user_container.get(current_class) is None:
+                    user_container[current_class] = []
+                    user_label_container[current_class] = []
+                user_container[current_class].append(resampled_section)
+                user_label_container[current_class].append(np.full(new_samples, fill_value=current_class)) #TODO CHANGE THIS SO EACH MODALITY GETS THE SAME LABEL
             # if percent_correct > 0.8:
-            current_class = user_labels[modal][user_key][next_class]
+            current_class = user_labels[device][modal][user_key][next_class]
             pointer = next_class
-        with lock:
-            resampled_data[modal].append(np.vstack(user_container))
-            resampled_labels[modal].append(np.hstack(user_label_container))
+
+        with lock: #here now I want to go through each activity
+            resampled_data[device][modal].append(user_container)
+            resampled_labels[device][modal].append(user_label_container)
+            # resampled_data[device][modal].append(np.vstack(user_container))
+            # resampled_labels[device][modal].append(np.hstack(user_label_container))
 
 
 # def resampling(modal):
-for modal in user_data:
-    resampled_data[modal] = []
-    resampled_labels[modal] = []
-    t_modal = threading.Thread(target=modal_resample, args=(modal,))
-    threads.append(t_modal)
+for device in user_data:
+    resampled_data[device] = {}
+    resampled_labels[device] = {}
+    for modal in user_data[device]:
+        resampled_data[device][modal] = []
+        resampled_labels[device][modal] = []
+        t_modal = threading.Thread(target=modal_resample, args=(device, modal,))
+        threads.append(t_modal)
 
 
 for t in threads:
@@ -186,8 +175,36 @@ for t in threads:
 
 
 
+joined_device = {}
+joined_device_labels = {}
+# phone acc and gyro should go together
+for device in resampled_data:
+    # get all modals
+    joined_device[device] = {}
+    joined_device_labels[device] = {}
+    acc_resampled = resampled_labels[device]['accel']
+    gyro_resampled = resampled_labels[device]['gyro']
+    for user_idx in range(len(acc_resampled)):
+        print('testing')
+        joined_device[device][user_idx] = []
+        joined_device_labels[device][user_idx] = []
+        user_acc = acc_resampled[user_idx]
+        user_gyro = gyro_resampled[user_idx]
+        # now compare each class between accel and gyro
+        for class_val in user_acc:
+            #we do not want the class if there is not a corresponding reading on the other modality
+            if user_acc.get(class_val) is None or user_gyro.get(class_val) is None:
+                continue
+            accel_classes_instances = user_acc[class_val][0]
+            gyro_classes_instances = user_gyro[class_val][0]
+            smallest_device = min([len(accel_classes_instances), len(gyro_classes_instances)])
 
+            short_data_acc = resampled_data[device]['accel'][user_idx][class_val][0][0:smallest_device]
+            short_labels_acc = accel_classes_instances[0:smallest_device]
 
+            short_data_gyro = resampled_data[device]['gyro'][user_idx][class_val][0][0:smallest_device]
+            joined_device[device][user_idx].append(np.hstack((short_data_acc, short_data_gyro)))
+            joined_device_labels[device][user_idx].append(short_labels_acc)
 
 
 
@@ -197,44 +214,43 @@ window_size = 128
 stride = 64
 segmented_data = {}
 segmented_labels = {}
-for device in user_data:
-    for modal in user_data[device]: # get the modality key
-        segmented_data[modal] = []
-        segmented_labels[modal] = []
-        for user in user_labels[modal].keys():
-            user_container = []
-            user_labels_container = []
-            user_dat = user_labels[modal][user]
-            current_class = user_dat[0]
-            for i in range(0, user_dat.shape[0] - window_size, stride):
-                indicies = range(i, i + window_size)
+# go through each device and segment them using window size and stride
+for device in joined_device:
+    segmented_data[device] ={}
+    segmented_labels[device] ={}
+    for user_idx in range(len(joined_device[device])): # for each of the users you will now do the segmentation
+        segmented_data[device][user_idx] = []
+        segmented_labels[device][user_idx] = []
+        data_holder = []
+        label_holder = []
+        for task_id, activity in enumerate(joined_device[device][user_idx]):
+            segment = segment_data(activity, window_size, stride)
+            data_holder.append(segment)
+            label_holder.append(np.full(len(segment), fill_value=mapping[task_id]))
+        segmented_data[device][user_idx] = np.vstack(data_holder)
+        segmented_labels[device][user_idx] = np.hstack(label_holder)
 
-                segment = user_dat[indicies]
-                actual_class = np.count_nonzero(segment == current_class) // len(segment)
-                if actual_class > 0.8:
-                    labels = np.full(128,fill_value=current_class)
-                    user_labels_container.append(segment)
-                    user_container.append(user_data[modal][user][indicies])
-                elif actual_class < 0.4:
-                    current_class = [val for val in np.unique(segment) if val != current_class][0]
-            segmented_data[modal].append(user_container)
-            segmented_labels[modal].append(user_labels_container)
-    sampling_hz = 20.0
-    target_hz = 50.0
 
-    resampled_data = {}
 
-    for modal in segmented_data.keys():
-        for user_index in range(len(segmented_data[modal])):
-            segmented_data[modal][user_index] = np.array(segmented_data[modal][user_index])
 
-            segmented_labels[modal][user_index] = np.hstack(segmented_labels[modal][user_index])
 
-        # num_samples =
+res_data = list([np.vstack([*x]) for x in zip(segmented_data["phone"].values(), segmented_data["watch"].values())])
+res_labels =list([np.hstack([*x]) for x in zip(segmented_labels["phone"].values(), segmented_labels["watch"].values())])
+
+#now concat the watch on the phone
+total = {
+    "data": res_data,
+    "labels": res_labels
+}
+hkl.dump(total, "./processed_wisdm.hkl")
+
+
+#get all devices
+
+
 
 
 test = 1
-
 
 
 

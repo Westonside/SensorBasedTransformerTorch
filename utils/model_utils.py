@@ -49,9 +49,10 @@ class BinaryClassificationFormatter(OutputFormatter):
             self.class_accuracy[i] = (correct, total)
 
         self.print_accuracy(epoch, loss=loss, valid=valid)
+
     def print_accuracy(self, epoch: int, loss=None, valid=False):
         print('{} Epoch: {} | Acc: {} | total loss: {}'.format(
-                "Train" if not validation else "Validation" ,epoch, self.format_accuracy(), loss if loss is not None else ""))
+                "Train" if validation else "Validation" ,epoch, self.format_accuracy(), loss if loss is not None else ""))
 
     def format_accuracy(self):
         output = ""
@@ -87,6 +88,7 @@ def extract_features(model, data, device, batch_size=128):
         outputs.append(model(acc,gyro).detach().cpu())
     print('feature extraction has been completed')
     return np.vstack(outputs)
+
 
 
 

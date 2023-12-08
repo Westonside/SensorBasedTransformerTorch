@@ -26,8 +26,10 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
     # orientation_data = []
     # orientation_labels = []
     selected_datasets = []
-    #                      0        1           2           3       4       5       6       7       8    9       10      11     12
-    align_all_classes  = ['Walk', 'Upstair', 'Downstair', 'Sit', 'Stand', 'Lay', 'Jump', 'Run', 'Bike', 'Car', 'Bus', 'Train', 'Subway']
+    #                      0        1           2           3       4       5       6       7       8    9       10      11     12        13        14              15     16      17       18          19          20
+    align_all_classes  = ['Walk', 'Upstair', 'Downstair', 'Sit', 'Stand', 'Lay', 'Jump', 'Run', 'Bike', 'Car', 'Bus', 'Train', 'Subway', 'Typing', 'BrushTeeth', 'Soup', 'Chips', 'Pasta', 'Drinking','Sandwich', 'Kicking',
+                           # 21     22             23        24         25
+                          'Catch', 'Dribbling', 'Writing', 'Clapping', 'Folding']
 
     for i, dataset in enumerate(os.listdir(path)):
         if dataset in container:
@@ -60,6 +62,10 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
         elif dataset == "SHL":
             central_train_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in training_labels[i]]))
             central_test_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in testing_labels[i]]))
+        elif dataset == "WISDM":
+            central_train_label_align.append(np.hstack([x for x in training_labels[i]]))
+            central_test_label_align.append(np.hstack([x for x in testing_labels[i]]))
+            print('testing')
 
     training_data = np.vstack(training_data)
     training_labels = np.hstack(central_train_label_align)
@@ -112,10 +118,26 @@ def remap_classes(train_labels, test_labels, total_labels):
     There will be no shuffling of data to avoid data leakage
     K Folds is generated for each client to ensure a better representation of the data by having more balanced data
 """
-def load_data(client_data:list, client_labels:list, test_split:int, valid_split=None, orientation_data=None):
+def load_data(client_data:list, client_labels:list, test_split:int, total_classes:int, valid_split=None, orientation_data=None):
    num_test_users = int(len(client_data) * test_split)
-   train, test = best_samples(client_data, client_labels,num_test_users, num_validation=valid_split)
+   train, test = random_user_selection(client_data, client_labels,num_test_users, total_classes)
    return train, test, ()
+
+def random_user_selection(user_data, user_labels, num_test_users, total_classes):
+    users = set({})
+    test_data = []
+    test_labels = []
+    while(len(users) != num_test_users):
+        user = np.random.randint(0, len(user_data))
+        users.add(user)
+        test_data.append(user_data[user])
+        test_labels.append(user_labels[user])
+
+    # now you will get the users from the dict
+    train_data = [user_data[x] for x in range(len(user_data))if x not in users]
+    train_labels = [user_labels[x] for x in range(len(user_labels)) if x not in users]
+    return (train_data,train_labels), (test_data, test_labels)
+
 
 def best_samples(user_data, user_labels, num_test_users:int, num_validation=None):
     #the validation can be users from the user set
@@ -161,7 +183,7 @@ def load_hhar(path):
     # get the data
     client_data, client_labels = load_clients_data(path, dataset_classes_users_map["HHAR"][1])
 
-    train, test, orientation = load_data(client_data, client_labels, 0.1, 0.1)
+    train, test, orientation = load_data(client_data, client_labels, 0.2, len(dataset_training_classes["HHAR"]))
 
     # for i in range(dataset_classes_users_map["HHAR"][1]): # for all clients
     #     client_orientation_train[i] = orientations[orientationsNames[i]][client_orientation_train[i]]
@@ -177,7 +199,7 @@ def load_hhar(path):
 
 def load_motion_sense(path: str):
     client_data, client_labels = load_clients_data(path, dataset_classes_users_map["MotionSense"][1])
-    train, test, client_orientation= load_data(client_data, client_labels, 0.1,0.1 )
+    train, test, client_orientation= load_data(client_data, client_labels, 0.2,len(dataset_training_classes["MotionSense"]))
     print('testing')
     train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), client_orientation
@@ -201,7 +223,19 @@ def load_shl(path: str):
 
     client_data_train = {i: data for i, data in enumerate(client_data)}
     client_train_label = {i: label for i, label in enumerate(client_labels)}
-    train, test, orientation = load_data(client_data_train, client_train_label, 0.1, 0.1)
+    train, test, orientation = load_data(client_data_train, client_train_label, 0.2, len(dataset_training_classes["SHL"]))
+    train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
+    return (train_data, train_labels), (test_data, test_labels), ()
+
+def load_wisdm(path: str):
+    vals = os.listdir(path)
+    client_data = hkl.load(os.path.join(path,vals[0]))
+    data = client_data['data']
+    labels = client_data['labels']
+    train, test, client_orientation = load_data(data, labels, 0.2,
+                                                len(dataset_training_classes["WISDM"]))
+
+
     train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), ()
 
@@ -212,15 +246,16 @@ dataset_classes_users_map ={
     "MotionSense": (load_motion_sense, 24),
     # "RealWorld": (load_realworld, 15)
     "UCI": (load_uci, 5),
-    "SHL": (load_shl, 9)
+    "SHL": (load_shl, 9),
+    "WISDM": (load_wisdm, 51)
 }
 
 dataset_training_classes = {
     "HHAR": [],
     "MotionSense": ['Downstairs', 'Upstairs', 'Sitting', 'Standing', 'Walking', 'Jogging'],
     "UCI": ['Walking', 'Upstair','Downstair', 'Sitting', 'Standing', 'Lying'],
-    "SHL": ['Standing','Walking','Runing','Biking','Car','Bus','Train','Subway']
-
+    "SHL": ['Standing','Walking','Runing','Biking','Car','Bus','Train','Subway'],
+    "WISDM": ["Walking", "Jogging", "Upstairs", "Sitting", "Standing", "Typing", "Teeth", "Soup", "Chips", "Pasta", "Drinking", "Sandwich", "Kicking", "Catch", "Dribbling", "Writing", "Clapping", "Folding" ]
 
 }
 
@@ -228,5 +263,5 @@ dataset_training_classes = {
 
 
 if __name__ == '__main__':
-    load_datasets(["MotionSense"])
+    load_datasets(["WISDM", "MotionSense", "UCI"])
     pass

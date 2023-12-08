@@ -57,6 +57,7 @@ def process_module(code , module, branch_outputs: dict):
 
 
 class TransformerModel(nn.Module):
+    #NOTE: This code directy uses sections from the HART model and design of the model is inspired from the model used here https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/blob/main/model.py
     TRANSFORMER_MODEL_NAME = "Transformer_Model"
     def __init__(self, input_shape ,  modal_count=2, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super().__init__()
@@ -93,9 +94,6 @@ class TransformerModel(nn.Module):
             self.transform_layers[first_layer_name] = x1
             # next is the multihead attention
 
-
-
-
             projection_attention_position = (0, int(self.projection_dim/modal_count))
             for modal in range(modal_count):
                 attention_name = f"layer_{layerIndex}_modal{modal}_attention"
@@ -108,16 +106,6 @@ class TransformerModel(nn.Module):
                 self.transform_layers[attention_name] = sensor_wise_attention
                 projection_attention_position = (projection_attention_position[1], self.projection_half+projection_per_modality)
 
-
-            # acc_attention_name = f"layer_{layerIndex}_acc_attention"
-            # #acc attention branch
-            # acc_attention = SensorMultiHeadAttention(self.projection_half, num_heads,0,self.projection_half,drop_path_rate=self.dropPathRate[layerIndex],dropout_rate=dropout_rate)
-            # self.transform_layers[acc_attention_name] = acc_attention
-            # # gyro attention branch
-            # gyro_attention_name = f"layer_{layerIndex}_gyro_attention-end"
-            # gyro_attention = SensorMultiHeadAttention(self.projection_half, num_heads, self.projection_half,self.projection_dim, dropout_rate=dropout_rate, drop_path_rate=self.dropPathRate[layerIndex])
-            # self.transform_layers[gyro_attention_name] = gyro_attention
-
             # the next normalization layer
             x2_name = f"layer_{layerIndex}_2_norm"
             x2 = nn.LayerNorm(eps=1e-6, normalized_shape=self.projection_dim)
@@ -125,12 +113,6 @@ class TransformerModel(nn.Module):
 
             # the multilayer perceptron
             x3_name = f"layer_{layerIndex}_mlp"
-            # x3 = nn.Sequential(
-            #     nn.Linear(in_features=activity_count, out_features=self.transformer_units[0]),
-            #     nn.SiLU(),
-            #     nn.Dropout(dropout_rate),
-            #     nn.Linear(in_features=self.transformer_units[0], out_features=self.transformer_units[1]),
-            # )
             x3 = MLP(self.projection_dim, self.transformer_units, dropout_rate)
             self.transform_layers[x3_name] = x3
 

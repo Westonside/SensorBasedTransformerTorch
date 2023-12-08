@@ -2,6 +2,7 @@ import os
 
 import torch
 from torch import nn
+from sklearn.metrics.pairwise import cosine_similarity
 
 from model import load_pretrained, Gated_Embedding_Unit
 
@@ -25,6 +26,14 @@ class TransferModel(nn.Module):
         acc = self.acc_gated(acc_extracted)
         gyro = self.gyro_gated(gyro_extracted)
         return torch.concat((acc,gyro), dim=1)
+        # sim = cosine_similarity(acc.cpu().detach().numpy(), gyro.cpu().detach().numpy())
+        # return torch.tensor(sim).to(global_device)
+        # similarity = acc * gyro
+        #
+        # # Sum over the feature dimension to get a single similarity score for each sample
+        # similarity = torch.sum(similarity, dim=1)
+        # return similarity
+        # return torch.matmul(acc,gyro.t())
         # return acc, gyro #experiement with concatentating each of these
 
 

@@ -79,6 +79,7 @@ def main(configuration_file: str):
         print(configuration)
         dataset = load_datasets(match_config_key(configuration, "load_files"), path="./datasets/processed")
         task = match_configuration(configuration, 'type')(dataset, **configuration)
+        print('starting training')
         task.train()
 
 
@@ -89,7 +90,7 @@ def main(configuration_file: str):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    configuration_file = "./configurations/trained_clustering_ft_ext.json"
+    configuration_file = "./configurations/basic_configuration.json"
 
     main(configuration_file)
 

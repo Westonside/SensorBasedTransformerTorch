@@ -24,13 +24,14 @@ def pretext_one():
 
 class Training_Task:
     # this will either load the model or create the model
-    def __init__(self, dataset, modalities, save_dir: str, save_file: str,  epochs=80, early_stop_patience=None):
+    def __init__(self, dataset, modalities, save_dir: str, save_file: str,  epochs=80,batch_size=64, early_stop_patience=None):
         self.model = None
         self.dataset = dataset
         self.dir = save_dir
         self.save_file = save_file
         self.epochs = epochs
         self.model = None
+        self.batch_size = batch_size
         self.num_modal = len(modalities) if isinstance(modalities, list) else 1
         modals_names = " ".join(modalities) if isinstance(modalities, list) else modalities
         self.modal_range = modals[modals_names]
@@ -90,7 +91,7 @@ class Training_Task:
         optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
         training, training_label = self.get_training_data()
         for epoch in range(1, self.epochs + 1):
-            train_epoch(self.model, epoch, training, training_label, output_formatter=self.get_output_formatter(),
+            train_epoch(self.model, epoch, training, training_label,batch_size=self.batch_size, output_formatter=self.get_output_formatter(),
                         optimizer=optimizer, loss_fn=self.get_loss(), device=device)
             if self.early_stopping is not None:
                 stop = self.early_stopping.check(validation(self.model, epoch,  *self.get_validation_data(), self.get_loss(), self.get_output_formatter(), device))
@@ -109,8 +110,8 @@ class Training_Task:
 
 class Classification_Task(Training_Task):
     TASK_NAME = "classification_task"
-    def __init__(self, dataset: UserDataLoader, modalities=["accelerometer"],  epochs=80, early_stop=False, **kwargs):
-        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities, epochs=epochs)
+    def __init__(self, dataset: UserDataLoader, modalities=["accelerometer"],  epochs=80, batch_size=64, early_stop=False, **kwargs):
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities, epochs=epochs, batch_size=batch_size)
         self.dataset = dataset
         self.model = None
         self.create_model()
@@ -134,8 +135,8 @@ class Classification_Task(Training_Task):
 
 class Transformation_Classification_Task(Training_Task):
     TASK_NAME = "transformation_classification_task"
-    def __init__(self, dataset: UserDataLoader, epochs=80, modalities=["accelerometer"],  **kwargs):
-        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs, early_stop_patience=kwargs["early_stopping_patience"])
+    def __init__(self, dataset: UserDataLoader, epochs=80, batch_size=64, modalities=["accelerometer"],  **kwargs):
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs, early_stop_patience=kwargs["early_stopping_patience"], batch_size=batch_size)
         self.model = None
         self.transformations = transform_funcs_vectorized
         self.create_model()
@@ -291,10 +292,10 @@ class FeatureExtractionTask(Training_Task):
 
 class Multi_Modal_Clustering_Task(Training_Task):
     TASK_NAME = "multi_modal_clustering_task"
-    def __init__(self, dataset: UserDataLoader, modalities=None,   epochs=80, **kwargs):
+    def __init__(self, dataset: UserDataLoader, modalities=None,   epochs=80, batch_size=128, **kwargs):
         # use the silhouette score in kmeans
         self.feature_extractor_path = kwargs["feature_extractor_paths"]
-        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  epochs=epochs)
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=modalities,  batch_size=batch_size,epochs=epochs)
 
 
         self.dataset = dataset
@@ -319,7 +320,7 @@ class Multi_Modal_Clustering_Task(Training_Task):
             queue_v = None
             use_the_queue = False
             centroid = None
-            batch_size = 128
+            batch_size = self.batch_size
 
 
             permutation = torch.randperm(training.shape[0])
@@ -329,8 +330,8 @@ class Multi_Modal_Clustering_Task(Training_Task):
                 # data = data.to(device)
                 data = training[permutation[i:i + batch_size]]
 
-                acc = torch.from_numpy(data[:, :, 0:3]).to(device)
-                gyro = torch.from_numpy(data[:, :, 3:6]).to(device)
+                acc = torch.from_numpy(data[:, :, 0:3]).to(device) #get the first triaxial data
+                gyro = torch.from_numpy(data[:, :, 3:6]).to(device) # get the secodn triaxial data
                 with torch.set_grad_enabled(True):
                     acc_ft, gyro_ft, classified_acc, classified_gyro, recon_loss = self.model(acc,gyro)
                     recon_weight = 50
@@ -349,7 +350,7 @@ class Multi_Modal_Clustering_Task(Training_Task):
                     # calculate the loss
                     loss = loss_op(sim_audio_gyro) + loss_op(sim_audio_acc)
                     # kmeans time
-                    queue_v,  out, use_the_queue = update_queue(queue_v, use_the_queue, fused_data)
+                    queue_v,  out, use_the_queue = update_queue(queue_v, use_the_queue, fused_data, batch_size)
                     kmeans = KMeans(n_clusters=256, mode='cosine')
                     labels = kmeans.fit_predict(out)
                     centroid = kmeans.centroids
@@ -394,9 +395,9 @@ def cluster_contrastive(fushed,centroid,labels,bs):
     return I2C_loss
 
 
-def update_queue(queue,use_the_queue,fuse):
+def update_queue(queue,use_the_queue,fuse, batch_size):
     # return queue,fuse,use_the_queue
-    bs = int(1024)
+    bs = batch_size
     fuse2 = fuse.detach()
     fuse2 = fuse2.view(-1, 32, fuse2.shape[-1]) # this breaks the fused array into a 3D array of inferred dimension x 32 x last dimension
     fuse2 = fuse2[:,:16,:] # break into blocks of 16
