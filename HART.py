@@ -9,6 +9,7 @@ class HartModel(nn.Module):
     def __init__(self, input_shape, activity_count: int, projection_dim=192, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super().__init__()
         self.model_type = 'Transformer'
+        self.projection_dim = projection_dim
         self.projection_half = projection_dim // 2
         self.projection_quarter = projection_dim // 4
         self.activity_count = activity_count
@@ -18,7 +19,7 @@ class HartModel(nn.Module):
             projection_dim
         ]
         self.input = nn.Linear(input_shape[1], out_features=input_shape[1])
-        self.patches = SensorPatches(self.dim, patchSize, timeStep, num_modal=2) #The HART model assumes that there only two modalities
+        self.patches = SensorPatches(projection_dim, patchSize, timeStep, num_modal=2) #The HART model assumes that there only two modalities
         self.patch_encoder = PatchEncoder(num_patches=patchSize, projection_dim=self.projection_dim)
         self.transform_layers = nn.ModuleDict() # add items as you go
         self.activation = nn.SiLU()
@@ -38,7 +39,7 @@ class HartModel(nn.Module):
 
             acc_attention_branch = f"acc_{layerIndex}_attention"
             branch_acc = SensorMultiHeadAttention(self.projection_quarter, num_heads,0,self.projection_quarter, drop_path_rate=self.dropPathRate[layerIndex], dropout_rate=dropout_rate)
-            self.transformer_layers[acc_attention_branch] = branch_acc
+            self.transform_layers[acc_attention_branch] = branch_acc
 
             gyro_attention_branch = f"gyro_{layerIndex}_attention-end"
             branch_gyro_attention = SensorMultiHeadAttention(self.projection_quarter, num_heads, self.projection_quarter+self.projection_half, projection_dim, drop_path_rate=self.dropPathRate[layerIndex],dropout_rate=dropout_rate)
@@ -92,7 +93,7 @@ class HartModel(nn.Module):
         # pass through the logits
         logits = self.classification(mlp_head)
         return self.softmax(logits)
-    
+
 class LiteFormer(nn.Module):
     def __init__(self,startIndex,stopIndex, projectionSize, kernelSize = 16, attentionHead = 3, use_bias=False, dropPathRate = 0.0,dropout_rate = 0,**kwargs):
         super(LiteFormer, self).__init__(**kwargs)
