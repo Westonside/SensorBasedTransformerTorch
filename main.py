@@ -5,6 +5,7 @@ import hickle
 import numpy as np
 import torch.nn.functional
 
+from HART import HartModel
 from datasets import loadDataset
 from model import TransformerModel, TransformerClassificationModel
 from sklearn.model_selection import train_test_split
@@ -31,66 +32,39 @@ from utils.configuration_utils import match_config_key, modals
 # I am taking one dataset for the self supervised training and another for the testing(downstream task)
 # compare my transformer and hart transformer to see which is faster and has similar accuracy () do last
 
+global_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def main(configuration_file: str):
-    # Use a breakpoint in the (code line below to debug your script.
     config = (configuration_utils.load_configuration(configuration_file))
-    Motion_Sense = [2, 1, 3, 4, 0, 7]
-    ACTIVITY_LABEL = ['Standing', 'Walking', 'Runing', 'Biking', 'Car', 'Bus', 'Train', 'Subway']
-    activity_count= len(ACTIVITY_LABEL)
 
 
-    local_epoch = 200
-    batch_size = 64
-    projection_dim = 192
-    frame_length = 16
-    time_step = 16
-    data_set_name = "MotionSense"
 
-    segment_size = 128
-    num_input_channels = 6
-
-    input_shape = (segment_size, num_input_channels)
-    projection_half = projection_dim // 2
-    projection_quarter = projection_dim // 4
-    filter_attention = 4
-
-    transformer_units = [
-        projection_dim * 2,
-        projection_dim,
-    ]
-    R = projection_half // filter_attention
-
-    segmentTime = [x for x in range(0, segment_size - frame_length+ time_step, time_step)]
-    # model = TransformerClassificationModel(input_shape,activity_count, modal_count=2)
-
-    # define the optimizer here
-    learningRate = 3e-4
-    # optimizer = torch.optim.Adam(model.parameters(), lr=learningRate)
-    # print(model)
-    training_tasks = []
-
-    # dataset = load_datasets(["MotionSense"], path="./datasets/processed")
+    # data_in = load_datasets(["SHL"], path='./datasets/processed')
+    model = HartModel((128,6), 8)
+    model.to(global_device)
+    # train_data = data_in.train
+    # train_labels = data_in.train_label
+    input_val = torch.rand((32,128,6)).to(global_device)
+    output = model(input_val)
+    print(output)
+    # for configuration in config['configurations']:
+    #     # for training_tasks in  training_tasks:
+    #     print(configuration)
+    #     dataset = load_datasets(match_config_key(configuration, "load_files"), path="./datasets/processed")
+    #     task = match_configuration(configuration, 'type')(dataset, **configuration)
+    #     print('starting training')
+    #     task.train()
     #
+    #     with open("configurations_completed.txt", "a+") as f:
+    #         f.write(str(configuration))
     #
-    # task = Classification_Task(dataset, save_path="./", previous_task_path=None, epochs=80, early_stop=False,modalities=['accelerometer'])
-    # task.train()
-    for configuration in config['configurations']:
-        # for training_tasks in  training_tasks:
-        print(configuration)
-        dataset = load_datasets(match_config_key(configuration, "load_files"), path="./datasets/processed")
-        task = match_configuration(configuration, 'type')(dataset, **configuration)
-        print('starting training')
-        task.train()
-
-
-        gc.collect()
-        torch.cuda.empty_cache()
+    #     gc.collect()
+    #     torch.cuda.empty_cache()
 
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    configuration_file = "./configurations/basic_configuration.json"
+    configuration_file = "./configurations/already_trained_extractors.json"
 
     main(configuration_file)
 

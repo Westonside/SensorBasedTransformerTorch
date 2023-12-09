@@ -65,7 +65,7 @@ class HartModel(nn.Module):
 
 
     def forward(self, src):
-        src = self.layer_1(src)
+        src = self.input(src)
         # next apply the layer norm
         # src = self.flatten(src) # do i need to flatten?
         patches = self.patches(src)  # this outputs 3x8x192 in keras
@@ -107,7 +107,7 @@ class LiteFormer(nn.Module):
         self.DropPathLayer = DropPath(dropPathRate)
         self.projection_half = projectionSize //2
         self.depthwise_kernel = nn.ModuleList([
-            nn.Conv1d(in_channels=1, out_channels=1, kernel_size=kernelSize, bias=self.use_bias)
+            nn.Conv1d(in_channels=24, out_channels=4, kernel_size=kernelSize, bias=self.use_bias, padding='same', groups=1)
             for _ in range(self.attention_head)
         ])
         self.init_weights()
@@ -126,8 +126,10 @@ class LiteFormer(nn.Module):
         input_vals = x[:,:,self.start_index:self.stop_index]
         input_shape = input_vals.shape
         # I may have to permute for the conv layers
-        input_data = x.permute(0,2,1) #TODO: do i need to do ?
-        reshaped_input = input_data.view(-1,self.attention_head, input_shape[1])
+        # input_data = x.permute(0,2,1) #TODO: do i need to do ?
+        input_data = input_vals.reshape(input_shape[0], -1,self.attention_head, input_shape[1]) # this reshape gets the data in the format N, H, channel, W no permute needed
+
+        # input_data = reshaped_input.permute(0, 1, 3,2) #TODO: do i need to do ? flip the channel with the sequence length gives the format batch height width channel
 
         #apply the softmax on the conv kernels
         if train:
@@ -135,16 +137,18 @@ class LiteFormer(nn.Module):
                 self.depthwise_kernel[conv_idx].weight.data = nn.functional.softmax(self.depthwise_kernel[conv_idx].weight.data, dim=0)
 
         #get the outputs
+
         convolution_outputs = torch.cat([
-            nn.functional.conv1d(reshaped_input[:,conv_idx, conv_idx+1, :],
+            nn.functional.conv1d(input_data[:,:,conv_idx:conv_idx+1, :],
                           self.depthwise_kernel[conv_idx].weight,
                           stride=1,
                           padding=self.kernel_size//2)
             for conv_idx in range(self.attention_head)
         ], dim=1)
         conv_outputs_drop = self.DropPathLayer(convolution_outputs)
-        unpermute = conv_outputs_drop.permute(0,2,1)
-        local_att = unpermute.view(unpermute, (-1, self.attention_head,-1, input_shape[1], self.projection_size))
+
+        local_att = conv_outputs_drop.reshape(conv_outputs_drop, (-1, self.attention_head,-1, input_shape[1], self.projection_size))
+        # unpermute = local_att.permute(0,2,1)
         return local_att
 
 
