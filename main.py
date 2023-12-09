@@ -38,33 +38,26 @@ def main(configuration_file: str):
 
 
 
-    # data_in = load_datasets(["SHL"], path='./datasets/processed')
-    model = HartModel((128,6), 8)
-    model.to(global_device)
-    # train_data = data_in.train
-    # train_labels = data_in.train_label
-    input_val = torch.rand((32,128,6)).to(global_device)
-    output = model(input_val)
-    print(output)
-    # for configuration in config['configurations']:
-    #     # for training_tasks in  training_tasks:
-    #     print(configuration)
-    #     dataset = load_datasets(match_config_key(configuration, "load_files"), path="./datasets/processed")
-    #     task = match_configuration(configuration, 'type')(dataset, **configuration)
-    #     print('starting training')
-    #     task.train()
-    #
-    #     with open("configurations_completed.txt", "a+") as f:
-    #         f.write(str(configuration))
-    #
-    #     gc.collect()
-    #     torch.cuda.empty_cache()
+
+    for configuration in config['configurations']:
+        # for training_tasks in  training_tasks:
+        print(configuration)
+        dataset = load_datasets(match_config_key(configuration, "load_files"), path="./datasets/processed")
+        task = match_configuration(configuration, 'type')(dataset, **configuration)
+        print('starting training')
+        task.train()
+
+        with open("configurations_completed.txt", "a+") as f:
+            f.write(str(configuration))
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    configuration_file = "./configurations/already_trained_extractors.json"
+    configuration_file = "./configurations/hart_classification.json"
 
     main(configuration_file)
 

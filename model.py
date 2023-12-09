@@ -13,24 +13,30 @@ from torch.nn import ModuleList
 """
 
 global_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-def process_module(code , module, branch_outputs: dict):
+def process_module(code , module, branch_outputs: dict, hart=False):
     skip_connection = 'skip_connection'
     # print(code)
     if "attention" in code:
         if code.rfind("end") != -1:
             # if this is the last attention head get the outpu and then concat all attention values
             output = module(branch_outputs["loop_input"])
-            all_branches = [branch_outputs[value] for value in list(filter(lambda x: "attention_branch" in x, branch_outputs.keys()))] # now you have all the attention outputs
-            if len(all_branches) != 0:
-                concat_attention = torch.concat((output, *all_branches), dim=2) # concat all the attention outputs))
+            if branch_outputs.get("attention_branch") is None :
+                concat_attention = branch_outputs["encoded_inputs"] + output
+
+            else:
+                all_branches = branch_outputs["attention_branch"]
+                concat_attention = torch.concat((*all_branches, output), dim=2) # concat all the attention outputs))
+                branch_outputs["attention_branch"] = None # clear the attention branch
                 #now you will add the patches and the concat attention values
-                branch_outputs["loop_input"] = branch_outputs["encoded_inputs"] + concat_attention
+            branch_outputs["loop_input"] = branch_outputs["encoded_inputs"] + concat_attention
             # print("end attention and adding skip connection")
             branch_outputs[skip_connection] = branch_outputs["loop_input"]
             # print("end attention")
         else:
             # print("start attention") # normal attention
-            branch_outputs["attention_branch"] = module(branch_outputs["loop_input"])
+            if branch_outputs.get("attention_branch") is None:
+                branch_outputs["attention_branch"] = []
+            branch_outputs["attention_branch"].append( module(branch_outputs["loop_input"]))
     elif "norm" in code: # normalization
         if code.rfind("end") != -1:
             # print("end normalization")

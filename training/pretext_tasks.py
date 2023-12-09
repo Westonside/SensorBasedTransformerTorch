@@ -9,6 +9,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 import hickle as hkl
+
+from HART import HartModel, HartClassificationModel
 from UserDataLoader import UserDataLoader
 from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel, MultiModalTransformer
 from transfer_model import TransferModel, TransferModelClassification
@@ -108,6 +110,28 @@ class Training_Task:
         pass
 
 
+class Classification_HART_Task(Training_Task):
+    TASK_NAME="hart_classification_task"
+    def __init__(self, dataset: UserDataLoader,  epochs=80, batch_size=64, early_stop=False, **kwargs):
+        super().__init__(dataset, save_file=kwargs["save_file"],save_dir=kwargs["save_dir"], modalities=["accelerometer", "gyroscope"], epochs=epochs, batch_size=batch_size)
+        self.model = None
+        self.create_model()
+
+    def create_model(self):
+        self.model = HartClassificationModel(len(self.dataset.classes))
+    def train_task_setup(self):
+        super().train_task_setup()
+
+    def get_training_data(self):
+        return self.dataset.train, self.dataset.train_label
+
+    def get_output_formatter(self):
+        return SingleClassificationFormatter()
+
+    def get_loss(self):
+        return nn.CrossEntropyLoss()
+
+
 class Classification_Task(Training_Task):
     TASK_NAME = "classification_task"
     def __init__(self, dataset: UserDataLoader, modalities=["accelerometer"],  epochs=80, batch_size=64, early_stop=False, **kwargs):
@@ -117,7 +141,7 @@ class Classification_Task(Training_Task):
         self.create_model()
 
     def create_model(self):
-        self.model = TransformerClassificationModel((self.sequence_length,len(self.modal_range)), 13, self.num_modal)
+        self.model = TransformerClassificationModel((self.sequence_length,len(self.modal_range)), len(self.dataset.classes), self.num_modal)
 
     def train_task_setup(self):
         super().train_task_setup()
@@ -330,8 +354,8 @@ class Multi_Modal_Clustering_Task(Training_Task):
                 # data = data.to(device)
                 data = training[permutation[i:i + batch_size]]
 
-                acc = torch.from_numpy(data[:, :, 0:3]).to(device) #get the first triaxial data
-                gyro = torch.from_numpy(data[:, :, 3:6]).to(device) # get the secodn triaxial data
+                acc = torch.from_numpy(data[:, :, 0:3]).float().to(device) #get the first triaxial data
+                gyro = torch.from_numpy(data[:, :, 3:6]).float().to(device) # get the secodn triaxial data
                 with torch.set_grad_enabled(True):
                     acc_ft, gyro_ft, classified_acc, classified_gyro, recon_loss = self.model(acc,gyro)
                     recon_weight = 50
@@ -426,5 +450,6 @@ PRETEXT_TASKS = {
     Multi_Modal_Clustering_Task.TASK_NAME: Multi_Modal_Clustering_Task,
     Classification_Task.TASK_NAME: Classification_Task,
     TransferLearningClassificationTask.TASK_NAME: TransferLearningClassificationTask,
-    FeatureExtractionTask.TASK_NAME: FeatureExtractionTask
+    FeatureExtractionTask.TASK_NAME: FeatureExtractionTask,
+    Classification_HART_Task.TASK_NAME: Classification_HART_Task
 }

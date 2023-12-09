@@ -1,0 +1,16 @@
+{
+  "configurations": [
+    {
+      "type": "hart_classification_task",
+      "load_files": ["MotionSense"],
+      "model_type": "TRANSFER_MODEL_CLUSTERING",
+      "modalities": ["accelerometer", "gyroscope"],
+      "early_stopping": true,
+      "epochs": 50,
+      "batch_size": 32,
+      "early_stopping_patience": 25,
+      "save_dir": "models",
+      "save_file": "hart_classification.hkl"
+    }
+  ]
+}

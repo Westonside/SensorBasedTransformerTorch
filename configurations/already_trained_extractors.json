@@ -3,8 +3,9 @@
     {
       "type": "multi_modal_clustering_task",
       "modalities": ["accelerometer", "gyroscope"],
-      "load_files": ["MotionSense"],
-      "epochs": 80,
+      "load_files": [ "MotionSense", "WISDM", "UCI"],
+      "epochs": 60,
+      "batch_size": 128,
       "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
       "save_dir": "models",
       "save_file": "multi_modal_clustering_model_trained.pt"

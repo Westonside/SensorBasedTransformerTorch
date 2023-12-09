@@ -2,21 +2,21 @@
   "configurations": [
 {
       "type": "transformation_classification_task",
-      "load_files": [ "MotionSense"],
+      "load_files": [ "MotionSense", "WISDM", "UCI"],
       "modalities": "accelerometer",
       "early_stopping": true,
       "epochs": 200,
-      "batch_size": 64,
+      "batch_size": 128,
       "early_stopping_patience": 25,
       "save_dir": "models",
       "save_file": "accelerometer_extract.pt"
     },
     {
       "type": "transformation_classification_task",
-      "load_files": [ "MotionSense"],
+      "load_files": [ "MotionSense", "WISDM", "UCI"],
       "modalities": "gyroscope",
       "epochs": 200,
-      "batch_size": 64,
+      "batch_size": 128,
       "early_stopping_patience": 25,
       "early_stopping": true,
       "save_dir": "models",
@@ -25,8 +25,8 @@
     {
       "type": "multi_modal_clustering_task",
       "modalities": ["accelerometer", "gyroscope"],
-      "load_files": ["MotionSense"],
-      "epochs": 80,
+      "load_files": ["MotionSense", "WISDM", "UCI"],
+      "epochs": 70,
       "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
       "save_dir": "models",
       "save_file": "multi_modal_clustering_model_trained.pt"
@@ -36,7 +36,7 @@
       "modalities": ["accelerometer", "gyroscope"],
       "load_files": ["SHL"],
       "model_type": "TRANSFER_MODEL_CLUSTERING",
-      "epochs": 80,
+      "epochs": 1,
       "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
       "save_dir": "extracted_features",
       "save_file": "multi_modal_extracted_features.hkl"
