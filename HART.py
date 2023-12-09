@@ -107,7 +107,7 @@ class LiteFormer(nn.Module):
         self.DropPathLayer = DropPath(dropPathRate)
         self.projection_half = projectionSize //2
         self.depthwise_kernel = nn.ModuleList([
-            nn.Conv1d(in_channels=24, out_channels=4, kernel_size=kernelSize, bias=self.use_bias, padding='same', groups=1)
+            nn.Conv1d(in_channels=1, out_channels=1, kernel_size=kernelSize, bias=self.use_bias, padding='same', groups=1)
             for _ in range(self.attention_head)
         ])
         self.init_weights()
@@ -127,7 +127,7 @@ class LiteFormer(nn.Module):
         input_shape = input_vals.shape
         # I may have to permute for the conv layers
         # input_data = x.permute(0,2,1) #TODO: do i need to do ?
-        input_data = input_vals.reshape(input_shape[0], -1,self.attention_head, input_shape[1]) # this reshape gets the data in the format N, H, channel, W no permute needed
+        input_data = input_vals.reshape(-1,self.attention_head, input_shape[1]) # this reshape gets the data in the format N, H, channel, W no permute needed
 
         # input_data = reshaped_input.permute(0, 1, 3,2) #TODO: do i need to do ? flip the channel with the sequence length gives the format batch height width channel
 
@@ -139,7 +139,7 @@ class LiteFormer(nn.Module):
         #get the outputs
 
         convolution_outputs = torch.cat([
-            nn.functional.conv1d(input_data[:,:,conv_idx:conv_idx+1, :],
+            nn.functional.conv1d(input_data[:,conv_idx:conv_idx+1, :],
                           self.depthwise_kernel[conv_idx].weight,
                           stride=1,
                           padding=self.kernel_size//2)
@@ -147,7 +147,7 @@ class LiteFormer(nn.Module):
         ], dim=1)
         conv_outputs_drop = self.DropPathLayer(convolution_outputs)
 
-        local_att = conv_outputs_drop.reshape(conv_outputs_drop, (-1, self.attention_head,-1, input_shape[1], self.projection_size))
+        local_att = conv_outputs_drop.reshape(input_shape[0], input_shape[1], -1)
         # unpermute = local_att.permute(0,2,1)
         return local_att
 
