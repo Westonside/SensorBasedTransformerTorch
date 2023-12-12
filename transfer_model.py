@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from sklearn.metrics.pairwise import cosine_similarity
 
-from model import load_pretrained, Gated_Embedding_Unit
+from model_impl.model import load_pretrained, Gated_Embedding_Unit
 
 global_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

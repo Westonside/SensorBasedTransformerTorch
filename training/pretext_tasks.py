@@ -2,22 +2,20 @@
     This function performs the first pretext task of training a transformer on each modality to perform transformation classification
     all datasets will be combined to perform the classification
 """
-import inspect
 import os
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
 import hickle as hkl
 
-from HART import HartModel, HartClassificationModel
-from UserDataLoader import UserDataLoader
-from model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel, MultiModalTransformer
+from model_impl.HART import HartClassificationModel
+from preprocess.UserDataLoader import UserDataLoader
+from model_impl.model import TransformerMultiTaskBinaryClassificationModel, TransformerClassificationModel, MultiModalTransformer
 from transfer_model import TransferModel, TransferModelClassification
 from utils.configuration_utils import modals
 from utils.model_utils import train_epoch, MultiTaskLoss, SingleClassificationFormatter, BinaryClassificationFormatter, \
-    MMS_loss, temp_train_epoch, EarlyStop, validation, extract_features
-from utils.transformation_utils import transform_funcs_vectorized, transform_funcs_names
+    MMS_loss, EarlyStop, validation, extract_features
+from preprocess.transformation_utils import transform_funcs_vectorized, transform_funcs_names
 from fast_pytorch_kmeans import KMeans
 
 def pretext_one():
@@ -324,7 +322,7 @@ class Multi_Modal_Clustering_Task(Training_Task):
 
         self.dataset = dataset
     def create_model(self):
-        self.model = MultiModalTransformer((128,3), self.feature_extractor_path,2,256)
+        self.model = git stMultiModalTransformer((128,3), self.feature_extractor_path,2,256)
         pass
 
     def train_task_setup(self):
@@ -406,16 +404,6 @@ def cluster_contrastive(fushed,centroid,labels,bs):
     S = S - target * (0.001) # subtract the target from the similarity matrix
 
     I2C_loss = nn.functional.nll_loss(nn.functional.log_softmax(S, dim=1), labels) # calculate the loss
-
-    # else:
-    #     S = S.view(S.shape[0], S.shape[1], -1)
-    #     nominator = S * target[:, :, None]
-    #     nominator = nominator.sum(dim=1)
-    #     nominator = th.logsumexp(nominator, dim=1)
-    #     denominator = S.view(S.shape[0], -1)
-    #     denominator = th.logsumexp(denominator, dim=1)
-    #     I2C_loss = th.mean(denominator - nominator)
-
     return I2C_loss
 
 

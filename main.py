@@ -5,11 +5,6 @@ import hickle
 import numpy as np
 import torch.nn.functional
 
-from HART import HartModel
-from datasets import loadDataset
-from model import TransformerModel, TransformerClassificationModel
-from sklearn.model_selection import train_test_split
-from sklearn.utils import class_weight
 
 from training.pretext_tasks import match_configuration, Classification_Task
 from utils import configuration_utils
@@ -57,7 +52,7 @@ def main(configuration_file: str):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    configuration_file = "./configurations/hart_classification.json"
+    configuration_file = "./configurations/train_extractors.json"
 
     main(configuration_file)
 

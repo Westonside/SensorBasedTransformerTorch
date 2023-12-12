@@ -4,9 +4,9 @@ import re
 import hickle as hkl
 import numpy as np
 import torch
-from sklearn.model_selection import StratifiedKFold, train_test_split
-import utils.data_shortcuts
-from UserDataLoader import UserDataLoader
+from sklearn.model_selection import train_test_split
+import preprocess.data_shortcuts
+from preprocess.UserDataLoader import UserDataLoader
 
 """
     Pass in a list of the form [val..valn] where val in [0,1] 1 meaning the dataset is to be loaded 0 otherwise not
@@ -190,7 +190,7 @@ def load_hhar(path):
     #     client_orientation_test[i] = orientations[orientationsNames[i]][client_orientation_test[i]]
 
 
-    train_data,train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
+    train_data,train_labels, test_data, test_labels = preprocess.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), ()
 
 
@@ -201,7 +201,7 @@ def load_motion_sense(path: str):
     client_data, client_labels = load_clients_data(path, dataset_classes_users_map["MotionSense"][1])
     train, test, client_orientation= load_data(client_data, client_labels, 0.2,len(dataset_training_classes["MotionSense"]))
     print('testing')
-    train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
+    train_data, train_labels, test_data, test_labels = preprocess.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), client_orientation
 
 
@@ -224,7 +224,7 @@ def load_shl(path: str):
     client_data_train = {i: data for i, data in enumerate(client_data)}
     client_train_label = {i: label for i, label in enumerate(client_labels)}
     train, test, orientation = load_data(client_data_train, client_train_label, 0.2, len(dataset_training_classes["SHL"]))
-    train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
+    train_data, train_labels, test_data, test_labels = preprocess.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), ()
 
 def load_wisdm(path: str):
@@ -236,7 +236,7 @@ def load_wisdm(path: str):
                                                 len(dataset_training_classes["WISDM"]))
 
 
-    train_data, train_labels, test_data, test_labels = utils.data_shortcuts.stack_train_test_orientation(train, test)
+    train_data, train_labels, test_data, test_labels = preprocess.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), ()
 
 

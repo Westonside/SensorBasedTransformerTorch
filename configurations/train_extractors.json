@@ -1,0 +1,26 @@
+{
+  "configurations": [
+{
+      "type": "transformation_classification_task",
+      "load_files": [ "MotionSense", "WISDM", "UCI"],
+      "modalities": "accelerometer",
+      "early_stopping": true,
+      "epochs": 200,
+      "batch_size": 128,
+      "early_stopping_patience": 25,
+      "save_dir": "models",
+      "save_file": "accelerometer_extract.pt"
+    },
+    {
+      "type": "transformation_classification_task",
+      "load_files": [ "MotionSense", "WISDM", "UCI"],
+      "modalities": "gyroscope",
+      "epochs": 200,
+      "batch_size": 128,
+      "early_stopping_patience": 25,
+      "early_stopping": true,
+      "save_dir": "models",
+      "save_file": "gyroscope_extract.pt"
+    }
+  ]
+}
