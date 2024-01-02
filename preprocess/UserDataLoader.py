@@ -69,7 +69,6 @@ class UserDataLoader(Dataset):
 
 
 
-
     def __getitem__(self, index: int) -> Tuple:
         pass
 

@@ -4,21 +4,21 @@ import torch
 from torch import nn
 from sklearn.metrics.pairwise import cosine_similarity
 
-from model_impl.model import load_pretrained, Gated_Embedding_Unit
+from model_impl.model import load_pretrained, Gated_Embedding_Unit, MultiModalTransformer
 
 global_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class TransferModel(nn.Module):
     NAME = "TRANSFER_MODEL_CLUSTERING"
-    def __init__(self,  pretrained_feature_extractors:list, embed_dim=96):
+    def __init__(self,  pretrained_feature_extractors:list, clustering_model, embed_dim=128):
         super(TransferModel,self).__init__()
         pretrained_modals = list(map(lambda x: os.path.join(os.curdir, x), pretrained_feature_extractors))
 
         self.acc_ft_ext = load_pretrained(list(filter(lambda x: "acc" in x, pretrained_modals))[0])
         self.gyro_ft_ext = load_pretrained(list(filter(lambda x: "gyro" in x, pretrained_modals))[0])
 
-        self.acc_gated = Gated_Embedding_Unit(1024,1024)
-        self.gyro_gated = Gated_Embedding_Unit(1024,1024)
+        # need to reload
+        self.acc_gated, self.gyro_gated = setup_clustering_gated(clustering_model, extractors=pretrained_feature_extractors)
 
     def forward(self, acc, gyro):
         acc_extracted = self.acc_ft_ext(acc)
@@ -26,15 +26,6 @@ class TransferModel(nn.Module):
         acc = self.acc_gated(acc_extracted)
         gyro = self.gyro_gated(gyro_extracted)
         return torch.concat((acc,gyro), dim=1)
-        # sim = cosine_similarity(acc.cpu().detach().numpy(), gyro.cpu().detach().numpy())
-        # return torch.tensor(sim).to(global_device)
-        # similarity = acc * gyro
-        #
-        # # Sum over the feature dimension to get a single similarity score for each sample
-        # similarity = torch.sum(similarity, dim=1)
-        # return similarity
-        # return torch.matmul(acc,gyro.t())
-        # return acc, gyro #experiement with concatentating each of these
 
 
 class TransferModelClassification(nn.Module):
@@ -49,3 +40,9 @@ class TransferModelClassification(nn.Module):
         # return self.classification(acc)
         return self.classification(features)
 
+
+
+def setup_clustering_gated(path, extractors):
+    model = MultiModalTransformer((128,6), extractors, 2)
+    model.load_state_dict(torch.load(path))
+    return model.acc_gated, model.gyro_gated

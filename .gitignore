@@ -3,3 +3,6 @@ __pycache__/
 ./datasets/
 ./models
 ./datasets
+./build
+.ipynb_checkpoints
+wandb

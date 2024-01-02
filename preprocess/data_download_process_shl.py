@@ -297,8 +297,8 @@ os.makedirs('datasetStandardized/' + dataName, exist_ok=True)
 # for i in range(len(userData)):
 #     startIndex = endIndex
 #     endIndex = startIndex +  userData[i].shape[0]
-hkl.dump(userData, 'datasetStandardized/' + dataName + '/clientsData.hkl')
-hkl.dump(labels, 'datasetStandardized/' + dataName + '/clientsLabel.hkl')
+hkl.dump(userData, 'datasetStandardized/' + dataName + '/clients_data.hkl')
+hkl.dump(labels, 'datasetStandardized/' + dataName + '/clients_label.hkl')
 
 # In[ ]:
 

@@ -26,8 +26,8 @@ def loadDataset(dataSetName, clientCount, dataConfig, randomSeed, mainDir, Strat
 
 
     elif (dataSetName == "SHL"):
-        clientData = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clientsData.hkl')
-        clientLabel = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clientsLabel.hkl')
+        clientData = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clients_data.hkl')
+        clientLabel = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clients_label.hkl')
         clientCount = clientData.shape[0]
 
         for i in range(0, clientCount):
@@ -65,8 +65,8 @@ def loadDataset(dataSetName, clientCount, dataConfig, randomSeed, mainDir, Strat
         clientDataTest = {new_list: [] for new_list in range(clientCount)}
         clientLabelTest = {new_list: [] for new_list in range(clientCount)}
 
-        clientOrientationData = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clientsData.hkl')
-        clientOrientationLabel = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clientsLabel.hkl')
+        clientOrientationData = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clients_data.hkl')
+        clientOrientationLabel = hkl.load(mainDir + 'datasetStandardized/' + str(dataSetName) + '/clients_label.hkl')
 
         clientOrientationTest = {new_list: [] for new_list in range(clientCount)}
         clientOrientationTrain = {new_list: [] for new_list in range(clientCount)}

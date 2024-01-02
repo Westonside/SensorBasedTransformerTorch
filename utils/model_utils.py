@@ -115,6 +115,7 @@ def train_epoch(model, epoch, train_data, train_label, optimizer, loss_fn, outpu
         train_loss += loss.item()
         loss.backward()
         optimizer.step()
+        # FIXME: Add for logging
         output_formatter.get_accuracy(outputs, batch_y, epoch, loss, valid=False)
 
 
@@ -165,6 +166,7 @@ def validation(model, epoch, validation_data, validation_labels, loss_fn, output
         # pred = torch.argmax(outputs, dim=1)
         loss = loss_fn(outputs, batch_y)
         valid_loss += loss.item()
+        #ADD IN FOR LOGGING
         output_formatter.get_accuracy(outputs, batch_y, epoch, loss, valid=True)
 
     return valid_loss

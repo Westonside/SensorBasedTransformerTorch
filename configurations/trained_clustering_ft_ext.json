@@ -1,5 +1,16 @@
-g{
+{
   "configurations": [
+    {
+      "type": "features_extraction_task",
+      "modalities": ["accelerometer", "gyroscope"],
+      "load_files": ["PAMAP"],
+      "model_type": "TRANSFER_MODEL_CLUSTERING",
+      "epochs": 60,
+      "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
+      "trained_clustering_model": "models/multi_modal_clustering_model_trained.pt",
+      "save_dir": "extracted_features",
+      "save_file": "multimodal_features_PAMAP.hkl"
+    },
     {
       "type": "features_extraction_task",
       "modalities": ["accelerometer", "gyroscope"],
@@ -7,8 +18,9 @@ g{
       "model_type": "TRANSFER_MODEL_CLUSTERING",
       "epochs": 60,
       "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
+      "trained_clustering_model": "models/multi_modal_clustering_model_trained.pt",
       "save_dir": "extracted_features",
-      "save_file": "multi_modal_extracted_features_similarity.hkl"
+      "save_file": "multimodal_features_SHL.hkl"
     }
   ]
 }

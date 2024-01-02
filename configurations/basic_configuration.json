@@ -36,10 +36,11 @@
       "modalities": ["accelerometer", "gyroscope"],
       "load_files": ["SHL"],
       "model_type": "TRANSFER_MODEL_CLUSTERING",
-      "epochs": 1,
+      "epochs": 60,
       "feature_extractor_paths": ["models/accelerometer_extract.pt", "models/gyroscope_extract.pt"],
+      "trained_clustering_model": "models/multi_modal_clustering_model_trained.pt",
       "save_dir": "extracted_features",
-      "save_file": "multi_modal_extracted_features.hkl"
+      "save_file": "multi_modal_extracted_features_similarity.hkl"
     }
   ]
 }

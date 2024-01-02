@@ -11,13 +11,13 @@ from preprocess.UserDataLoader import UserDataLoader
 """
     Pass in a list of the form [val..valn] where val in [0,1] 1 meaning the dataset is to be loaded 0 otherwise not
 """
-def load_datasets(container: list, path='../datasets/processed', validation=True):
+def load_datasets(container: list, path='../datasets/processed', validation=True, balance_sets=False):
     datasets = []
     UCI = [0, 1, 2, 3, 4, 5]
     HHAR = [3, 4, 0, 1, 2, 8]
     Motion_Sense = [2, 1, 3, 4, 0, 7] # these provide the indicies
     SHL = [4, 0, 7, 8, 9, 10, 11, 12]
-
+    PAMAP = {6: 5, 3: 3, 4: 4, 5: 0, 2: 7, 7: 8, 8: 26, 9:27}
 
     training_data = []
     training_labels = []
@@ -28,8 +28,8 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
     selected_datasets = []
     #                      0        1           2           3       4       5       6       7       8    9       10      11     12        13        14              15     16      17       18          19          20
     align_all_classes  = ['Walk', 'Upstair', 'Downstair', 'Sit', 'Stand', 'Lay', 'Jump', 'Run', 'Bike', 'Car', 'Bus', 'Train', 'Subway', 'Typing', 'BrushTeeth', 'Soup', 'Chips', 'Pasta', 'Drinking','Sandwich', 'Kicking',
-                           # 21     22             23        24         25
-                          'Catch', 'Dribbling', 'Writing', 'Clapping', 'Folding']
+                           # 21     22             23        24         25            27         28
+                          'Catch', 'Dribbling', 'Writing', 'Clapping', 'Folding', 'Nordic Walk' ,'Jump Rope']
 
     for i, dataset in enumerate(os.listdir(path)):
         if dataset in container:
@@ -62,7 +62,10 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
         elif dataset == "SHL":
             central_train_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in training_labels[i]]))
             central_test_label_align.append(np.hstack([SHL[labelIndex] for labelIndex in testing_labels[i]]))
-        elif dataset == "WISDM":
+        elif dataset == "PAMAP":
+            central_train_label_align.append(np.hstack([PAMAP[labelIndex] for labelIndex in training_labels[i]]))
+            central_test_label_align.append(np.hstack([PAMAP[labelIndex] for labelIndex in testing_labels[i]]))
+        else: # already label translated wisdm kuhar
             central_train_label_align.append(np.hstack([x for x in training_labels[i]]))
             central_test_label_align.append(np.hstack([x for x in testing_labels[i]]))
             print('testing')
@@ -80,7 +83,6 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
     training_labels, testing_labels, new_aligned_classes = remap_classes(training_labels,testing_labels, align_all_classes)
 
 
-    #TODO: shift the labels down after the remapping add testing for the shifting
     one_hot_training_labels = torch.nn.functional.one_hot(torch.from_numpy(training_labels),
                                                       num_classes=len(new_aligned_classes)).numpy()
     central_test_label = torch.nn.functional.one_hot(torch.from_numpy(testing_labels),
@@ -240,14 +242,26 @@ def load_wisdm(path: str):
     return (train_data, train_labels), (test_data, test_labels), ()
 
 
+def load_pamap(path: str):
+    vals = os.listdir(path)
+    client_data = hkl.load(os.path.join(path, vals[0]))
+    client_labels = hkl.load(os.path.join(path,vals[1]))
+    train, test, client_orientation = load_data(client_data, client_labels, 0.2,
+                                                9)
+
+    train_data, train_labels, test_data, test_labels = preprocess.data_shortcuts.stack_train_test_orientation(train,
+                                                                                                              test)
+    return (train_data, train_labels), (test_data, test_labels), ()
+
 dataset_classes_users_map ={
     #the map will contain a function to load the datset and the number of users
     "HHAR": (load_hhar, 51),
     "MotionSense": (load_motion_sense, 24),
     # "RealWorld": (load_realworld, 15)
     "UCI": (load_uci, 5),
-    "SHL": (load_shl, 9),
-    "WISDM": (load_wisdm, 51)
+    "SHL": (load_shl, 3),
+    "WISDM": (load_wisdm, 51),
+    "PAMAP": (load_pamap, 9)
 }
 
 dataset_training_classes = {
@@ -255,13 +269,20 @@ dataset_training_classes = {
     "MotionSense": ['Downstairs', 'Upstairs', 'Sitting', 'Standing', 'Walking', 'Jogging'],
     "UCI": ['Walking', 'Upstair','Downstair', 'Sitting', 'Standing', 'Lying'],
     "SHL": ['Standing','Walking','Runing','Biking','Car','Bus','Train','Subway'],
-    "WISDM": ["Walking", "Jogging", "Upstairs", "Sitting", "Standing", "Typing", "Teeth", "Soup", "Chips", "Pasta", "Drinking", "Sandwich", "Kicking", "Catch", "Dribbling", "Writing", "Clapping", "Folding" ]
-
+    "WISDM": ["Walking", "Jogging", "Upstairs", "Sitting", "Standing", "Typing", "Teeth", "Soup", "Chips", "Pasta", "Drinking", "Sandwich", "Kicking", "Catch", "Dribbling", "Writing", "Clapping", "Folding" ],
+    "PAMAP": ['lay',
+'sit',
+'stand',
+'walk',
+'run',
+'bike',
+'nordic-walk',
+              'jumprope']
 }
 
 
 
 
 if __name__ == '__main__':
-    load_datasets(["WISDM", "MotionSense", "UCI"])
+    load_datasets(["PAMAP"])
     pass

@@ -395,10 +395,10 @@ class MLPHead(nn.Module):
 
 class MultiModalTransformer(nn.Module):
     MULTI_MODAL_TRANSFORMER = "MULTI_MODAL_CLUSTERING"
-    def __init__(self, input_shape, pretrained_modals: list , modals:int, cluster_size: int, embed_dim=1024, projection_dim=2000, reconstruction_size=768, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
+    def __init__(self, input_shape, pretrained_modals: list , modals:int, cluster_size=50, embed_dim=128, projection_dim=3000, reconstruction_size=128, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(MultiModalTransformer, self).__init__()
-        # first we need to get our feature extractors which will be our trained transformer models
-
+        # first we need to get our feature extractors which willl be our trained transformer models
+        self.cluster_size = cluster_size
         pretrained_modals = list(map(lambda x: os.path.join(os.curdir, x), pretrained_modals))
 
         self.acc_ft_ext = load_pretrained(list(filter(lambda x: "acc" in x, pretrained_modals))[0])
@@ -430,10 +430,10 @@ class MultiModalTransformer(nn.Module):
         self.mse = nn.MSELoss(reduction='none')
 
     def forward(self, acc, gyro, mag=None):
-        # extract all features
+        # extract all features for each modality
         acc_features = self.acc_ft_ext(acc)
         gyro_features = self.gyro_ft_ext(gyro)
-
+        # the extracted features will now serve as the labels for the reconstruction task
         acc_reconstruction_gt = acc_features
         gyro_reconstruction_gt = gyro_features
 
@@ -459,18 +459,9 @@ class MultiModalTransformer(nn.Module):
 
         recon_loss_acc = torch.mean(self.mse(reconstruct_acc, acc_reconstruction_gt), dim=-1)
         recon_loss_gyro = torch.mean(self.mse(reconstruct_gyro, gyro_reconstruction_gt), dim=-1)
-        return acc_gated_features, gyro_features, classification_acc, classification_gyro, recon_loss_acc + recon_loss_gyro
-        reconstruction_gt = features # the ground truths for the reconstruction for the labels are the features
-        # gated_features = [self.gating_units[i](gated) for i, gated in enumerate(features)]
-        # reconstructed = [self.reconstruction_list[i](gated) for i, gated in enumerate(gated_features)]
-        # # now we will normalize the gated features
-        # normalized_features = [nn.functional.normalize(gated, dim=1, p=2) for gated in gated_features]
-        # # now we will classify the normalized features
-        # classification = [self.classification(gated) for gated in normalized_features]
-        #
-        # # now we will get the mean mse for the reconstructed
-        # reconstruction_loss = torch.asarray([torch.mean(self.mse(reconstructed[i], reconstruction_gt[i]), dim=-1) for i in range(self.modals)])
-        # return gated_features, classification, torch.sum(reconstruction_loss)
+        # print(reconstruct_acc, reconstruct_gyro, 'reconstruction')
+        return acc_gated_features, gyro_gated_features, classification_acc, classification_gyro, recon_loss_acc + recon_loss_gyro
+
 
 class Gated_Embedding_Unit(nn.Module):
     def __init__(self, input_dimension, output_dimension):

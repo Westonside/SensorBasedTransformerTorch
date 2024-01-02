@@ -2,10 +2,11 @@
   "configurations": [
     {
       "type": "hart_classification_task",
-      "load_files": ["MotionSense"],
+      "load_files": ["PAMAP"],
       "model_type": "TRANSFER_MODEL_CLUSTERING",
       "modalities": ["accelerometer", "gyroscope"],
       "early_stopping": true,
+      "verbose": true,
       "epochs": 50,
       "batch_size": 32,
       "early_stopping_patience": 25,
