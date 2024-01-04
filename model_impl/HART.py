@@ -4,7 +4,10 @@ import torch.nn.init as init
 import torch
 from model_impl.model import SensorPatches, PatchEncoder, DropPath, SensorMultiHeadAttention, MLP, MLPHead, process_module
 
-
+"""
+    This model is reimplementation of the HART model from https://github.com/brian7685/Multimodal-Clustering-Network
+    The model is reimplemented in pytorch and is based on the keras implementation of the model 
+"""
 class HartModel(nn.Module):
     def __init__(self, input_shape, projection_dim=192, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super().__init__()
@@ -70,7 +73,6 @@ class HartModel(nn.Module):
     def forward(self, src):
         src = self.input(src)
         # next apply the layer norm
-        # src = self.flatten(src) # do i need to flatten?
         patches = self.patches(src)  # this outputs 3x8x192 in keras
         # apply the position embedding to the patches
         position_embedded_patches = self.patch_encoder(patches)  # this ouputs 32x8x192 in keras
@@ -88,8 +90,6 @@ class HartModel(nn.Module):
         norm = self.last_norm(
             encoded_patches)  # 32,8,192 i think it should be the other way around? theirs is 8x192 as well which should probably be swapped in our case
         # apply gap
-        # gap = nn.AvgPool1d(norm.size()[1])(norm) # this needs to go to 32x192
-        # gap = nn.AdaptiveAvgPool1d(1)(norm).squeeze()
         gap = norm.mean(dim=1)
         # pass throug the final multilayer perceptron
         mlp_head = self.mlp_head(gap)
@@ -128,10 +128,8 @@ class LiteFormer(nn.Module):
         input_vals = x[:,:,self.start_index:self.stop_index]
         input_shape = input_vals.shape
         # I may have to permute for the conv layers
-        # input_data = x.permute(0,2,1) #TODO: do i need to do ?
         input_data = input_vals.reshape(-1,self.attention_head, input_shape[1]) # this reshape gets the data in the format N, H, channel, W no permute needed
 
-        # input_data = reshaped_input.permute(0, 1, 3,2) #TODO: do i need to do ? flip the channel with the sequence length gives the format batch height width channel
 
         #apply the softmax on the conv kernels
         if train:
@@ -150,11 +148,10 @@ class LiteFormer(nn.Module):
         conv_outputs_drop = self.DropPathLayer(convolution_outputs)
 
         local_att = conv_outputs_drop.reshape(input_shape[0], input_shape[1], -1)
-        # unpermute = local_att.permute(0,2,1)
         return local_att
 
 
-
+# for using hart for classificagion
 class HartClassificationModel(nn.Module):
     def __init__(self, n_classes:int, input_shape=(128,6), mlp_head_units = [1024], **kwargs ):
 

@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 
-
+# loss functions for multi task
 class MultiTaskLoss(nn.Module):
     def __init__(self, num_tasks: int):
         super(MultiTaskLoss, self).__init__()
@@ -20,7 +20,7 @@ class MultiTaskLoss(nn.Module):
             loss += self.loss(transform, target[transform_index])
         return loss
 
-
+# this is the base formatter used to calculate accuracy and print if verbose is true
 class OutputFormatter:
     def __init__(self, verbose=True):
         self.verbose = verbose
@@ -32,7 +32,7 @@ class OutputFormatter:
         if self.verbose:
             self.print_accuracy(epoch, loss)
 
-
+# formatter for multi task
 class BinaryClassificationFormatter(OutputFormatter):
     def __init__(self, tasks_count: int, task_names: list[str],  verbose=True):
         super().__init__(verbose)
@@ -61,7 +61,7 @@ class BinaryClassificationFormatter(OutputFormatter):
             output += "{}: {:.6f} ".format(self.task_names[i], correct / total)
         return output
 
-
+# formatter for single task classification
 class SingleClassificationFormatter(OutputFormatter):
     def __init__(self, verbose=True):
         super().__init__(verbose)
@@ -78,7 +78,7 @@ class SingleClassificationFormatter(OutputFormatter):
             "Train" if not valid else "Validation",epoch, (self.correct / self.total), loss if loss is not None else ""))
 
 
-
+# exetracting features from a dataset using pretrained model
 def extract_features(model, data, device, batch_size=128):
     outputs = []
     for i in range(0, data.shape[0], batch_size):
@@ -262,15 +262,15 @@ def convert_multitask_dict(labels, indicies):
 
 
 
-
-def save_model(model, folder, name): #TODO: Add model.extract_core to the model
+# for saving a trained model
+def save_model(model, folder, name):
     model = model.extract_core()
     model = freeze_model(model)  # freeze the model
     os.makedirs(folder, exist_ok=True)
     torch.jit.script(model)
     torch.jit.save(model, os.path.join(folder, name))
 
-
+# for freezing a model
 def freeze_model(model):
     for param in model.parameters():
         param.requires_grad = False
@@ -278,7 +278,8 @@ def freeze_model(model):
 
 
 
-
+# IMPORTANT
+# this code is from: https://github.com/brian7685/Multimodal-Clustering-Network
 class MMS_loss(nn.Module):
     def __init__(self):
         super(MMS_loss, self).__init__()

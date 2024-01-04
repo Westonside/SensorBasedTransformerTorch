@@ -11,6 +11,7 @@ from scipy.interpolate import interp1d
 
 from preprocess.preprocess_utils import download_url, download_and_extract
 
+
 link = "https://archive.ics.uci.edu/static/public/507/wisdm+smartphone+and+smartwatch+activity+and+biometrics+dataset.zip"
 
 
@@ -143,7 +144,7 @@ def modal_resample(device, modal):
                     user_container[current_class] = []
                     user_label_container[current_class] = []
                 user_container[current_class].append(resampled_section)
-                user_label_container[current_class].append(np.full(new_samples, fill_value=current_class)) #TODO CHANGE THIS SO EACH MODALITY GETS THE SAME LABEL
+                user_label_container[current_class].append(np.full(new_samples, fill_value=current_class))
             # if percent_correct > 0.8:
             current_class = user_labels[device][modal][user_key][next_class]
             pointer = next_class

@@ -8,8 +8,9 @@ np.random.seed(0)
 import zipfile
 import hickle as hkl
 
+# IMPORTANT!
+# THIS IMPLEMENTATION COMES FROM https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/blob/main/datasets/DATA_UCI.py
 
-# In[3]:
 
 
 # functions for loading and downloading the dataset

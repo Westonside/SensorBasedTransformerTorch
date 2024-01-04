@@ -21,6 +21,9 @@ import os
 import pandas as pd
 import requests
 
+# IMPORTANT!
+# THIS IMPLEMENTATION COMES FROM https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/blob/main/datasets/DATA_SHL.py
+
 np.random.seed(0)
 from scipy import signal
 

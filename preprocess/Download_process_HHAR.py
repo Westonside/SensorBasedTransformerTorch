@@ -5,6 +5,11 @@ import pandas as pd
 from subprocess import call
 import requests
 
+
+# IMPORTANT!
+# THIS IMPLEMENTATION COMES FROM https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/blob/main/datasets/DATA_HHAR.py
+# it is not used in the impl because of inconsistencies in the data
+
 np.random.seed(0)
 import urllib.request
 import zipfile

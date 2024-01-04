@@ -24,7 +24,7 @@ def pretext_one():
     print('pretext one')
 
 
-class Training_Task:
+class Training_Task: # this is the base class for all the training tasks
     # this will either load the model or create the model
     def __init__(self, dataset, modalities, save_dir: str, save_file: str, epochs=80, lr=0.03, batch_size=64,
                  early_stop_patience=None, verbose=False):
@@ -48,10 +48,6 @@ class Training_Task:
             self.get_early_stop(early_stop_patience)
         else:
             self.early_stopping = None
-        # if previous_task_path is None:
-        #     self.create_model()
-        # else:
-        #     self.load_model(previous_task_path)
         pass
 
     def create_model(self):
@@ -85,6 +81,7 @@ class Training_Task:
     def get_early_stop(self, patience: int):
         self.early_stopping = EarlyStop(patience)
 
+    # this will train the model and save it, early stopping can be used
     def train(self):
         # move the device to gpu
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -112,6 +109,7 @@ class Training_Task:
         pass
 
 
+# this will train the hart model to perform transformation classification
 class Classification_HART_Task(Training_Task):
     TASK_NAME = "hart_classification_task"
 
@@ -136,7 +134,7 @@ class Classification_HART_Task(Training_Task):
     def get_loss(self):
         return nn.CrossEntropyLoss()
 
-
+# this will train the single modal transformer to perform transformation classification
 class Classification_Task(Training_Task):
     TASK_NAME = "classification_task"
 
@@ -164,7 +162,7 @@ class Classification_Task(Training_Task):
     def get_loss(self):
         return nn.CrossEntropyLoss()
 
-
+# this will train the single modal transformer to perform transformation classification with a multi task set up
 class Transformation_Classification_Task(Training_Task):
     TASK_NAME = "transformation_classification_task"
 
@@ -181,8 +179,6 @@ class Transformation_Classification_Task(Training_Task):
         self.dataset.transform_sets(self.transformations)  # transform the data
 
     def create_model(self):
-        # TODO: ALLLOW PASSING IN OTHER  transformations
-        # TODO: remove the magic number
         self.model = TransformerMultiTaskBinaryClassificationModel((self.sequence_length, 3),
                                                                    len(transform_funcs_vectorized))
 
@@ -323,6 +319,7 @@ class Multi_Modal_Clustering_Task(Training_Task):
     def train_task_setup(self):
         super().train_task_setup()
 
+    # IMPORTANT: This implementation draws inspiration and even utilizes direct code from the following repository:https://github.com/brian7685/Multimodal-Clustering-Network
     def train(self):
         # you will first attempt to reconstruct the input
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

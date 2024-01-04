@@ -23,7 +23,9 @@ sweep_config['metric'] = metric
 
 
 
-
+"""
+    All the parameters that are to be tuned are added here
+"""
 parameters_dict = {
     # 'features': {
     #     'values': [64, 128, 256, 512, 1024, 2048]

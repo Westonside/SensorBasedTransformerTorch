@@ -9,7 +9,12 @@ import preprocess.data_shortcuts
 from preprocess.UserDataLoader import UserDataLoader
 
 """
-    Pass in a list of the form [val..valn] where val in [0,1] 1 meaning the dataset is to be loaded 0 otherwise not
+    IMPORTANT!! 
+    This file takes inspiration from the following github repo:
+    https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices
+    
+    
+    All functions prefixed by load are used to load the data from the dataset
 """
 def load_datasets(container: list, path='../datasets/processed', validation=True, balance_sets=False):
     datasets = []
@@ -47,7 +52,6 @@ def load_datasets(container: list, path='../datasets/processed', validation=True
     central_train_label_align = []
     central_test_label_align = []
     for i, dataset in enumerate(selected_datasets):
-        #TODO JUST USE A MAP TO MAP OVER THE DATASETES AND CONVERT THE LABELS
         if dataset == "MotionSense": #this converts the label to the correct label
             central_train_label_align.append([Motion_Sense[labelIndex] for labelIndex in training_labels[i]])
             central_test_label_align.append([Motion_Sense[label_index] for label_index in testing_labels[i]])
@@ -117,8 +121,7 @@ def remap_classes(train_labels, test_labels, total_labels):
 """
     Client data is loaded from the data and folds are generated for each client
     The client's data will be stacked on top of each other and the labels will be stacked on top of each other as well
-    There will be no shuffling of data to avoid data leakage
-    K Folds is generated for each client to ensure a better representation of the data by having more balanced data
+    There will be no shuffling of data to avoid data leakage and data is split by user
 """
 def load_data(client_data:list, client_labels:list, test_split:int, total_classes:int, valid_split=None, orientation_data=None):
    num_test_users = int(len(client_data) * test_split)
@@ -140,7 +143,7 @@ def random_user_selection(user_data, user_labels, num_test_users, total_classes)
     train_labels = [user_labels[x] for x in range(len(user_labels)) if x not in users]
     return (train_data,train_labels), (test_data, test_labels)
 
-
+# code for splitting by user into test and train
 def best_samples(user_data, user_labels, num_test_users:int, num_validation=None):
     #the validation can be users from the user set
     # the validation can be taken during training set
@@ -186,12 +189,6 @@ def load_hhar(path):
     client_data, client_labels = load_clients_data(path, dataset_classes_users_map["HHAR"][1])
 
     train, test, orientation = load_data(client_data, client_labels, 0.2, len(dataset_training_classes["HHAR"]))
-
-    # for i in range(dataset_classes_users_map["HHAR"][1]): # for all clients
-    #     client_orientation_train[i] = orientations[orientationsNames[i]][client_orientation_train[i]]
-    #     client_orientation_test[i] = orientations[orientationsNames[i]][client_orientation_test[i]]
-
-
     train_data,train_labels, test_data, test_labels = preprocess.data_shortcuts.stack_train_test_orientation(train, test)
     return (train_data, train_labels), (test_data, test_labels), ()
 

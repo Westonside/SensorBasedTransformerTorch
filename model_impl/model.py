@@ -62,6 +62,11 @@ def process_module(code , module, branch_outputs: dict, hart=False):
 
 
 
+"""
+    This is the transformer model implementation that draws implementation inspiration from the HART model
+    https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/blob/main/model.py
+    This is the implementation of the transformer model that will be used for the binary classification task as a feature extractor
+"""
 class TransformerModel(nn.Module):
     #NOTE: This code directy uses sections from the HART model and design of the model is inspired from the model used here https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/blob/main/model.py
     TRANSFORMER_MODEL_NAME = "Transformer_Model"
@@ -122,7 +127,6 @@ class TransformerModel(nn.Module):
             x3 = MLP(self.projection_dim, self.transformer_units, dropout_rate)
             self.transform_layers[x3_name] = x3
 
-            # the drop path TODO: what is a drop path??
             drop = DropPath(self.dropPathRate[layerIndex])
             self.transform_layers[f"layer_{layerIndex}_drop-path"] = drop
         self.last_norm = nn.LayerNorm(eps=1e-6, normalized_shape=self.projection_dim)
@@ -137,10 +141,6 @@ class TransformerModel(nn.Module):
 
     def forward(self, src: Tensor) -> Tensor:
         #src = src.cuda()
-        # TODO watch out that you are doing the skip connection right and that only one vector is being normalized
-        # TODO only permute what goes in the conv layers and then permute back
-        #TODO make the keras model and pass the input in one by one to see the shape
-        # src = src.permute(0,2,1)
         src = self.layer_1(src)
         # next apply the layer norm
         # src = self.flatten(src) # do i need to flatten?
@@ -160,16 +160,11 @@ class TransformerModel(nn.Module):
        # after going through all of the transformer layers, final normalization layer
         norm = self.last_norm(encoded_patches) # 32,8,192 i think it should be the other way around? theirs is 8x192 as well which should probably be swapped in our case
         # apply gap
-        # gap = nn.AvgPool1d(norm.size()[1])(norm) # this needs to go to 32x192
-        # gap = nn.AdaptiveAvgPool1d(1)(norm).squeeze()
         gap = norm.mean(dim=1)
         # pass throug the final multilayer perceptron
         mlp_head = self.mlp_head(gap)
         # pass through the logits
         return mlp_head # return the value from the mlp head
-        # logits = self.logits(mlp_head)
-        # # print('logits ', logits.shape)
-        # return logits
 
 class TransformerClassificationModel(nn.Module):
     def __init__(self,input_shape , activity_count: int,  modal_count=1, projection_per_modality= 96, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
@@ -187,6 +182,7 @@ class TransformerClassificationModel(nn.Module):
     def extract_core(self):
         return self.transformer_core
 
+# for using the transformer model for binary classification
 class TransformerMultiTaskBinaryClassificationModel(nn.Module):
     def __init__(self, input_shape, classification_heads:int, patchSize = 16, timeStep = 16, num_heads = 3, filterAttentionHead = 4, convKernels = [3, 7, 15, 31, 31, 31], mlp_head_units = [1024], dropout_rate = 0.3, useTokens = False):
         super(TransformerMultiTaskBinaryClassificationModel, self).__init__()
@@ -267,7 +263,7 @@ class SensorPatches(nn.Module):
         patch_outputs = []
         for projectors in self.projectors:
             in_data = inp[:, :, projection_position[0]:projection_position[1]]
-            in_data = in_data.permute(0,2,1)
+            in_data = in_data.permute(0,2,1) # you have to permute the data to get it in the correct format for pytorch
             patch_outputs.append(projectors(in_data))
             projection_position = (projection_position[1], projection_position[1]+3)
 
@@ -320,7 +316,6 @@ class SensorMultiHeadAttention(nn.Module):
         self.drop_path_rate = drop_path_rate
         self.attention = nn.MultiheadAttention(embed_dim=projection_half, num_heads=num_heads, dropout=dropout_rate)
         # pass input into the transformer attention attention  = torch.nn.MultiheadAttention(<input-size>, <num-heads>) -> x, _ = attention(x, x, x)
-        self.drop_path = DropPath(drop_path_rate) #TODO figure out what a drop path is
 
     def forward(self, input, training=None, return_attention_scores=False):
         extractedInput = input[:, :, self.start_index:self.stop_index]

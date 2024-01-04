@@ -5,13 +5,12 @@ from torch.utils.data import Dataset
 
 from preprocess.transformation_utils import transform_funcs_names
 
-
+# This is the main data loader used for the user data
 class UserDataLoader(Dataset):
     def __init__(self, train_data,  test_data,  classes, validation_data=None):
         self.train, self.train_label = train_data
         self.test, self.test_label = test_data
         self.classes = classes
-        #TODO: perform the transformations
         if validation_data is not None:
             self.validation, self.validation_label = validation_data
         self.transform_train = None
@@ -25,10 +24,7 @@ class UserDataLoader(Dataset):
         self.train_label = np.concatenate((self.train_label, self.validation_label), axis=0)
 
     def transform_sets(self, transformation_functions: list):
-        # this function will join the validation and the training together and then perform the transformations
-        # then it will split the data back into the validation and training sets
-        # self.train = np.concatenate((self.train, self.validation), axis=0)
-        # self.train_label = np.concatenate((self.train_label, self.validation_label), axis=0)
+        # this function will join the validation and the training together and then perform the transformations from https://github.com/iantangc/SelfHAR
         if hasattr(self, 'validation'):
             self.combine_training_validation()
             self.transform_train, self.transform_label = self.generate_transform_data(self.train, transformation_functions)
@@ -78,14 +74,14 @@ class UserDataLoader(Dataset):
         if hasattr(self, 'validation'):
             self.validation = self.validation[:,:,modal_range]
 
-def map_multitask_y(y, output_tasks):
+def map_multitask_y(y, output_tasks): # this will create the labels for the transformations
     multitask_y = {} # create a dictionary
     for i, task in enumerate(output_tasks): # for the number of output labels that correspond to the transformation function
         multitask_y[task] = y[:, i] # add the value at the task to be all rows and select all values in column i and so multitask_y['noised']=[] this will return a 1D array that has a value that indicates if the coreresponding sample has had the corresponding transformation applied or not
     return multitask_y
 
 
-def multitask_train_test_split(dataset, test_size=0.1, random_seed=42):
+def multitask_train_test_split(dataset, test_size=0.1, random_seed=42): # this will split the data into the training and validation sets
     dataset_size = len(dataset[0]) # get the size of the sensor data
     indices = np.arange(dataset_size) #creates array of ints from [0-dataset_size)
     np.random.seed(random_seed) #ccreate the seed so you can always have the same seed

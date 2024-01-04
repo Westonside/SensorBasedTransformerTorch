@@ -9,6 +9,11 @@ from preprocess_utils import download_and_extract
 #from preprocess.preprocess_utils import  download_and_extract
 import pandas as pd
 
+
+# IMPORTANT!
+# THIS IMPLEMENTATION COMES FROM https://github.com/getalp/Lightweight-Transformer-Models-For-HAR-on-Mobile-Devices/blob/main/datasets/DATA_MotionSense.py
+
+
 file_name = ["A_DeviceMotion_data"]
 links = ["https://github.com/mmalekzadeh/motion-sense/blob/master/data/A_DeviceMotion_data.zip?raw=true"]
 
@@ -34,12 +39,10 @@ def segment_client_file(client_file, client_index, client_dict: dict, time_step,
     df = df.drop(columns=df.columns[0]) #drop their index
     acc = df[['userAcceleration.x', 'userAcceleration.y', 'userAcceleration.z']].to_numpy()
     gyr = df[['rotationRate.x', 'rotationRate.y', 'rotationRate.z']].to_numpy()
-    # mag = df[['attitude.roll', 'attitude.pitch', 'attitude.yaw']].to_numpy() #TODO add the mag in later
 
     # now hstack the acc and gyr
     acc_gyr = np.hstack((acc, gyr))
     # now segment the data
-    #TODO MAKE IT SO THAT ALL SEQUENCES ARE THE SAME LENGTH BUT PADDING IS ADDED TO THE END SO THAT THE TRANSFORMER IGNORES IT
     segments = []
     for i in range(0, acc_gyr.shape[0] - time_step, step): # time step is 128 step is 64
        segments.append(acc_gyr[i:i + time_step, :])  # append the data to the segment array

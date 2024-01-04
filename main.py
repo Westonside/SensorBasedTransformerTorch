@@ -16,7 +16,7 @@ def main(configuration_file: str):
 
 
 
-
+    # runs through all configurations in passed in task
     for configuration in config['configurations']:
         # for training_tasks in  training_tasks:
         print(configuration)
@@ -33,7 +33,6 @@ def main(configuration_file: str):
 
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     configuration_file = "./configurations/trained_clustering_ft_ext.json"
 

@@ -7,7 +7,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from model_impl.model import load_pretrained, Gated_Embedding_Unit, MultiModalTransformer
 
 global_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+"""
+    This model is used to use the knowledge to extract features from the data
+    expects a pretrained clustering model and pretrained feature extractors for all modalities
+"""
 class TransferModel(nn.Module):
     NAME = "TRANSFER_MODEL_CLUSTERING"
     def __init__(self,  pretrained_feature_extractors:list, clustering_model, embed_dim=128):
